@@ -97,34 +97,27 @@ contract LybraRebaseAssetPoolBase is Ownable {
     }
 
     /**
-     * @notice Deposit ETH on behalf of an address, update the interest distribution and deposit record the this address, can mint EUSD directly
-     *
+     * @notice Allowing direct deposits of ETH, the pool may convert it into the corresponding collateral during the implementation. 
+     * While depositing, it is possible to simultaneously mint eUSD for oneself.
      * Emits a `DepositEther` event.
      *
      * Requirements:
-     * - `onBehalfOf` cannot be the zero address.
      * - `mintAmount` Send 0 if doesn't mint EUSD
      * - msg.value Must be higher than 0.
-     *
-     * @dev Record the deposited ETH in the ratio of 1:1 and convert it into stETH.
      */
     function depositEtherToMint(
-        address onBehalfOf,
         uint256 mintAmount
     ) external payable virtual {}
 
     /**
-     * @notice Deposit staked ETH on behalf of an address, update the interest distribution and deposit record the this address, can mint EUSD directly
-     * Emits a `DepositEther` event.
+     * @notice Deposit collateral and allow minting eUSD for oneself.
+     * Emits a `DepositAsset` event.
      *
      * Requirements:
-     * - `onBehalfOf` cannot be the zero address.
      * - `assetAmount` Must be higher than 0.
      * - `mintAmount` Send 0 if doesn't mint EUSD
-     * @dev Record the deposited stETH in the ratio of 1:1.
      */
     function depositAssetToMint(
-        address onBehalfOf,
         uint256 assetAmount,
         uint256 mintAmount
     ) external virtual {}

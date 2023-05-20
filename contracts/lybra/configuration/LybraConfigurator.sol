@@ -114,7 +114,7 @@ contract Configurator is Governance {
         emit KeeperRateChanged(pool, newRate);
     }
 
-    function setMinter(address[] calldata _contracts, bool[] calldata _bools) external checkRole(TIMELOCK) {
+    function setEsLBRMiner(address[] calldata _contracts, bool[] calldata _bools) external checkRole(TIMELOCK) {
         for(uint256 i = 0;i<_contracts.length;i++) {
             esLBRMiner[_contracts[i]] = _bools[i];
         }

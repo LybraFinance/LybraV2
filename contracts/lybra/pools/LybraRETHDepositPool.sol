@@ -21,35 +21,22 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
     constructor(address _eusd, address _config, uint256 _mintFee) LybraNonRebaseAssetPoolBase(_eusd, 0xae78736Cd615f374D3085123A210448E74Fc6393, _config) {
     }
 
-    /**
-     * @notice Deposit staked ETH on behalf of an address, update the interest distribution and deposit record the this address, can mint EUSD directly
-     * Emits a `DepositAsset` event.
-     *
-     * Requirements:
-     * - `onBehalfOf` cannot be the zero address.
-     * - `stakeAssetAmount` Must be higher than 0.
-     * - `mintAmount` Send 0 if doesn't mint EUSD
-     * @dev Record the deposited stETH in the ratio of 1:1.
-     */
     function depositAssetToMint(
-        address onBehalfOf,
         uint256 stakeAssetAmount,
         uint256 mintAmount
     ) external override{
-        require(onBehalfOf != address(0), "DEPOSIT_TO_THE_ZERO_ADDRESS");
         require(stakeAssetAmount >= 1 ether, "Deposit should not be less than 1 rETH.");
         uint256 preBalance = rETH.balanceOf(address(this));
         rETH.transferFrom(msg.sender, address(this), stakeAssetAmount);
         require(rETH.balanceOf(address(this)) >= preBalance + stakeAssetAmount, "");
 
 
-        uint256 assetPrice = getAssetPrice();
-        require(stakeAssetAmount * assetPrice >= mintAmount * 1e18, "");
-        depositedAsset[onBehalfOf] += stakeAssetAmount;
+        depositedAsset[msg.sender] += stakeAssetAmount;
         if (mintAmount > 0) {
-            _mintEUSD(onBehalfOf, onBehalfOf, mintAmount, assetPrice);
+            uint256 assetPrice = getAssetPrice();
+            _mintEUSD(msg.sender, msg.sender, mintAmount, assetPrice);
         }
-        emit DepositAsset(msg.sender, onBehalfOf, stakeAssetAmount, block.timestamp);
+        emit DepositAsset(msg.sender, msg.sender, stakeAssetAmount, block.timestamp);
     }
 
     /**
@@ -92,7 +79,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         uint256 assetPrice = getAssetPrice();
         uint256 onBehalfOfCollateralRate = (depositedAsset[onBehalfOf] *
             assetPrice *
-            100) / EUSD.getMintedEUSDByShares(borrowedShares[onBehalfOf]);
+            100) / getBorrowedOf(onBehalfOf);
         require(
             onBehalfOfCollateralRate < configurator.badCollateralRate(),
             "Borrowers collateral rate should below badCollateralRate"
@@ -147,13 +134,13 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
     ) external override {
         uint256 assetPrice = getAssetPrice();
         require(
-            (totalDepositedAsset() * assetPrice * 100) / poolTotalEUSDCirculation <
+            (totalDepositedAsset() * assetPrice * 100) / getPoolTotalEUSDCirculation() <
                 configurator.badCollateralRate(),
             "overallCollateralRate should below 150%"
         );
         uint256 onBehalfOfCollateralRate = (depositedAsset[onBehalfOf] *
             assetPrice *
-            100) / EUSD.getMintedEUSDByShares(borrowedShares[onBehalfOf]);
+            100) / getBorrowedOf(onBehalfOf);
         require(
             onBehalfOfCollateralRate < 125 * 1e18,
             "borrowers collateralRate should below 125%"
@@ -245,7 +232,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         uint256 _mintAmount,
         uint256 _assetPrice
     ) internal override {
-        require(poolTotalEUSDCirculation+_mintAmount <= configurator.mintPoolMaxSupply(address(this)), "");
+        require(getPoolTotalEUSDCirculation() + _mintAmount <= configurator.mintPoolMaxSupply(address(this)), "");
         _updateFee(_provider);
 
         try configurator.refreshMintReward(_provider) {} catch {}
@@ -255,9 +242,9 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         borrowedShares[_provider] += sharesAmount;
 
         EUSD.mint(_onBehalfOf, _mintAmount);
-        poolTotalEUSDCirculation += _mintAmount;
+        poolTotalEUSDShares += sharesAmount;
         _checkHealth(_provider, _assetPrice);
-        emit Mint(msg.sender, _onBehalfOf, _mintAmount, block.timestamp);
+        emit Mint(_provider, _onBehalfOf, _mintAmount, block.timestamp);
     }
 
     function _repay(
@@ -285,7 +272,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         try configurator.distributeDividends() {} catch {}
 
         feeUpdatedAt[_onBehalfOf] = block.timestamp;
-        poolTotalEUSDCirculation -= amount;
+        poolTotalEUSDShares -= sharesAmount;
         emit Burn(_provider, _onBehalfOf, amount, block.timestamp);
     }
 
@@ -302,6 +289,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
     function getAssetPrice() public override returns (uint256) {
         uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
         return etherPrice * rETH.getEthValue(1e18) / 1e18;
+
     }
 
 }

@@ -54,12 +54,11 @@ contract CrossChainPool is Ownable {
         esLBRMinter = IesLBRMinter(_esLBRMinter);
     }
 
-    function deposit(address onBehalfOf, uint256 eusdAmount) external updateReward(onBehalfOf) {
+    function deposit(address onBehalfOf, uint256 share) external updateReward(onBehalfOf) {
         address spender = _msgSender();
         require(spender == address(eUSD), "");
         try esLBRMinter.refreshReward(onBehalfOf) {} catch {}
 
-        uint256 share = eUSD.getSharesByMintedEUSD(eusdAmount);
         stakedOf[onBehalfOf] += share;
         totalStaked += share;
     }
@@ -74,7 +73,7 @@ contract CrossChainPool is Ownable {
 
         stakedOf[user] -= shareAmount;
         totalStaked -= shareAmount;
-        eUSD.transferShares(user, shareAmount);
+        eUSD.transfer(user, eUSD.getMintedEUSDByShares(shareAmount));
     }
 
     /// @notice Request a flash loan
@@ -131,6 +130,10 @@ contract CrossChainPool is Ownable {
 
     function getDepositedEUSD(address user) external view returns(uint256) {
         return eUSD.getMintedEUSDByShares(stakedOf[user]);
+    }
+
+    function getDepositedWEUSD(address user) external view returns(uint256) {
+        return stakedOf[user];
     }
 
     function getClaimAbleStETH(address user) external view returns (uint256 amount) {

@@ -33,23 +33,9 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
     constructor(address _eusd, address _config) LybraRebaseAssetPoolBase(_eusd, _config) {
     }
 
-    /**
-     * @notice Deposit ETH on behalf of an address, update the interest distribution and deposit record the this address, can mint EUSD directly
-     *
-     * Emits a `DepositEther` event.
-     *
-     * Requirements:
-     * - `onBehalfOf` cannot be the zero address.
-     * - `mintAmount` Send 0 if doesn't mint EUSD
-     * - msg.value Must be higher than 0.
-     *
-     * @dev Record the deposited ETH in the ratio of 1:1 and convert it into stETH.
-     */
     function depositEtherToMint(
-        address onBehalfOf,
         uint256 mintAmount
     ) external payable override {
-        require(onBehalfOf != address(0), "DEPOSIT_TO_THE_ZERO_ADDRESS");
         require(msg.value >= 1 ether, "Deposit should not be less than 1 ETH.");
         uint256 etherPrice = _etherPrice();
         require(msg.value * etherPrice >= mintAmount * 1e18, "");
@@ -59,38 +45,27 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
         require(sharesAmount > 0, "ZERO_DEPOSIT");
 
         totalDepositedAsset += msg.value;
-        depositedAsset[onBehalfOf] += msg.value;
-        depositedTime[onBehalfOf] = block.timestamp;
+        depositedAsset[msg.sender] += msg.value;
+        depositedTime[msg.sender] = block.timestamp;
 
         if (mintAmount > 0) {
-            _mintEUSD(onBehalfOf, onBehalfOf, mintAmount, etherPrice);
+            _mintEUSD(msg.sender, msg.sender, mintAmount, etherPrice);
         }
 
-        emit DepositEther(msg.sender, onBehalfOf, msg.value, block.timestamp);
+        emit DepositEther(msg.sender, msg.sender, msg.value, block.timestamp);
     }
 
     /**
-     * @notice Deposit stETH on behalf of an address, update the interest distribution and deposit record the this address, can mint EUSD directly
-     * Emits a `DepositEther` event.
-     *
-     * Requirements:
-     * - `onBehalfOf` cannot be the zero address.
-     * - `stETHamount` Must be higher than 0.
-     * - `mintAmount` Send 0 if doesn't mint EUSD
      * @dev Record the deposited stETH in the ratio of 1:1.
      */
     function depositAssetToMint(
-        address onBehalfOf,
         uint256 assetAmount,
         uint256 mintAmount
     ) external override {
-        uint256 assetPrice = getAssetPrice();
-        require(onBehalfOf != address(0), "DEPOSIT_TO_THE_ZERO_ADDRESS");
         require(
             assetAmount >= 1 ether,
             "Deposit should not be less than 1 stETH."
         );
-        require(assetAmount * assetPrice >= mintAmount * 1e18, "");
 
         bool success = lido.transferFrom(
             msg.sender,
@@ -100,16 +75,17 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
         require(success, "");
 
         totalDepositedAsset += assetAmount;
-        depositedAsset[onBehalfOf] += assetAmount;
-        depositedTime[onBehalfOf] = block.timestamp;
+        depositedAsset[msg.sender] += assetAmount;
+        depositedTime[msg.sender] = block.timestamp;
 
         if (mintAmount > 0) {
-            _mintEUSD(onBehalfOf, onBehalfOf, mintAmount, assetPrice);
+            uint256 assetPrice = getAssetPrice();
+            _mintEUSD(msg.sender, msg.sender, mintAmount, assetPrice);
         }
         emit DepositAsset(
             msg.sender,
             address(lido),
-            onBehalfOf,
+            msg.sender,
             assetAmount,
             block.timestamp
         );

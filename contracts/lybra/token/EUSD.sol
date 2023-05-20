@@ -39,27 +39,34 @@ contract EUSD is BaseOFTV2, EUSDbase {
     /************************************************************************
     * internal functions
     ************************************************************************/
-    function _debitFrom(address _from, uint16, bytes32, uint _amount) internal virtual override returns (uint) {
+    function _debitFrom(address _from, uint16, bytes32, uint _share) internal virtual override returns (uint) {
         address spender = _msgSender();
-        if (_from != spender) _spendAllowance(_from, spender, _amount);
+        uint256 amount = getMintedEUSDByShares(_share);
+        if (_from != spender) _spendAllowance(_from, spender, amount);
 
-        _transfer(_from, address(chainPool), _amount);
-        chainPool.deposit(_from, _amount);
-        return _amount;
+        _transfer(_from, address(chainPool), amount);
+        chainPool.deposit(_from, _share);
+        return _share;
     }
 
-    function _creditTo(uint16, address _toAddress, uint _amount) internal virtual override returns (uint) {
-        uint256 share = getSharesByMintedEUSD(_amount);
-        chainPool.withdraw(_toAddress, share);
-        return _amount;
+    function _creditTo(uint16, address _toAddress, uint _share) internal virtual override returns (uint) {
+        if(_toAddress != address(this)) {
+            chainPool.withdraw(_toAddress, _share);
+        }
+        return _share;
     }
 
-    function _transferFrom(address _from, address _to, uint _amount) internal virtual override returns (uint) {
+    function _transferFrom(address _from, address _to, uint _share) internal virtual override returns (uint) {
         address spender = _msgSender();
+        uint256 amount = getMintedEUSDByShares(_share);
         // if transfer from this contract, no need to check allowance
-        if (_from != address(this) && _from != spender) _spendAllowance(_from, spender, _amount);
-        _transfer(_from, _to, _amount);
-        return _amount;
+        if (_from != address(this) && _from != spender) _spendAllowance(_from, spender, amount);
+        if(_from == address(this)) {
+            chainPool.withdraw(_to, _share);
+        } else {
+            _transfer(_from, _to, amount);
+        }
+        return _share;
     }
 
     function _ld2sdRate() internal view virtual override returns (uint) {

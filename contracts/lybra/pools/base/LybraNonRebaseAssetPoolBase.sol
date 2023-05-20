@@ -12,7 +12,7 @@ contract LybraNonRebaseAssetPoolBase {
     Iconfigurator public immutable configurator;
     //
     uint8 immutable borrowType = 1;
-    uint256 public poolTotalEUSDCirculation;
+    uint256 public poolTotalEUSDShares;
 
     mapping(address => uint256) public depositedAsset;
     mapping(address => uint256) borrowedShares;
@@ -82,34 +82,14 @@ contract LybraNonRebaseAssetPoolBase {
     }
 
     /**
-     * @notice Deposit ETH on behalf of an address, update the interest distribution and deposit record the this address, can mint EUSD directly
-     *
+     * @notice Deposit staked ETH, update the interest distribution, can mint EUSD directly
      * Emits a `DepositAsset` event.
      *
      * Requirements:
-     * - `onBehalfOf` cannot be the zero address.
-     * - `mintAmount` Send 0 if doesn't mint EUSD
-     * - msg.value Must be higher than 0.
-     *
-     * @dev Record the deposited ETH in the ratio of 1:1 and convert it into stETH.
-     */
-    function depositEtherToMint(
-        address onBehalfOf,
-        uint256 mintAmount
-    ) external payable virtual {}
-
-    /**
-     * @notice Deposit staked ETH on behalf of an address, update the interest distribution and deposit record the this address, can mint EUSD directly
-     * Emits a `DepositAsset` event.
-     *
-     * Requirements:
-     * - `onBehalfOf` cannot be the zero address.
      * - `stakeAssetAmount` Must be higher than 0.
      * - `mintAmount` Send 0 if doesn't mint EUSD
-     * @dev Record the deposited stETH in the ratio of 1:1.
      */
     function depositAssetToMint(
-        address onBehalfOf,
         uint256 stakeAssetAmount,
         uint256 mintAmount
     ) external virtual {}
@@ -243,7 +223,7 @@ contract LybraNonRebaseAssetPoolBase {
         return borrowType;
     }
 
-    function getPoolTotalEUSDCirculation() external view returns (uint256) {
-        return poolTotalEUSDCirculation;
+    function getPoolTotalEUSDCirculation() public view returns (uint256) {
+        return EUSD.getMintedEUSDByShares(poolTotalEUSDShares);
     }
 }
