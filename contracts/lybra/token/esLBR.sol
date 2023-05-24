@@ -10,15 +10,14 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import "../interfaces/Iconfigurator.sol";
 
-interface IlybraFund {
+interface IdividendPool {
     function refreshReward(address user) external;
 }
 
 contract esLBR is ERC20Votes {
     Iconfigurator public immutable configurator;
 
-    uint256 maxMinted = 60_500_000 * 1e18;
-    uint256 public totalMinted;
+    uint256 maxSupply = 100_000_000 * 1e18;
 
     constructor(
         address _config
@@ -32,17 +31,15 @@ contract esLBR is ERC20Votes {
 
     function mint(address user, uint256 amount) external returns(bool) {
         require(configurator.esLBRMiner(msg.sender), "not authorized");
-        uint256 reward = amount;
-        if(totalMinted + reward > maxMinted) {
-                reward = maxMinted - totalMinted;
-            }
-        totalMinted += reward;
-        _mint(user, reward);
+        require(totalSupply() + amount <= maxSupply, "exceeding the maximum supply quantity.");
+        try IdividendPool(configurator.getDividendPool()).refreshReward(user) {} catch {}
+        _mint(user, amount);
         return true;
     }
 
     function burn(address user, uint256 amount) external returns(bool) {
         require(configurator.esLBRMiner(msg.sender), "not authorized");
+        try IdividendPool(configurator.getDividendPool()).refreshReward(user) {} catch {}
         _burn(user, amount);
         return true;
     }

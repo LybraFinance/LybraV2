@@ -26,14 +26,14 @@ contract LBR is BaseOFTV2, ERC20 {
     }
 
     function mint(address user, uint256 amount) external returns(bool) {
-        require(msg.sender == configurator.getDividendPool(), "not authorized");
+        require(configurator.esLBRMiner(msg.sender), "not authorized");
         require(totalSupply() + amount <= maxSupply, "exceeding the maximum supply quantity.");
         _mint(user, amount);
         return true;
     }
 
     function burn(address user, uint256 amount) external returns(bool) {
-        require(msg.sender == configurator.getDividendPool(), "not authorized");
+        require(configurator.esLBRMiner(msg.sender), "not authorized");
         _burn(user, amount);
         return true;
     }

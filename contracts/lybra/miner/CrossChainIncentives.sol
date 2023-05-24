@@ -1,8 +1,26 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8;
+// SPDX-License-Identifier: GPL-3.0
 
+pragma solidity ^0.8.17;
+/**
+ * @title esLBRMiner is a stripped down version of Synthetix StakingRewards.sol, to reward esLBR to EUSD minters.
+ * Differences from the original contract,
+ * - Get `totalStaked` from totalSupply() in contract EUSD.
+ * - Get `stakedOf(user)` from getBorrowedOf(user) in contract EUSD.
+ * - When an address borrowed EUSD amount changes, call the refreshReward method to update rewards to be claimed.
+ */
+
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IesLBR.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../interfaces/Iconfigurator.sol";
+
+interface ICrossChainPool {
+    function totalStaked() external view returns(uint256);
+    function stakedOf(address user) external view returns(uint256);
+}
+
+interface IlybraFund {
+    function refreshReward(address user) external;
+}
 
 interface IesLBRBoost {
     function getUserBoost(
@@ -17,12 +35,11 @@ interface IesLBRBoost {
         returns (uint256 unlockTime);
 }
 
-contract StakingRewardsV2 {
-    // Immutable variables for staking and rewards tokens
-    IERC20 public immutable stakingToken;
-    IesLBR public immutable rewardsToken;
+contract CrossChainIncentives is Ownable {
+    Iconfigurator public immutable configurator;
     IesLBRBoost public esLBRBoost;
-    address public owner;
+    IlybraFund public lybraFund;
+    address public esLBR;
 
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 2_592_000;
@@ -40,28 +57,35 @@ contract StakingRewardsV2 {
     mapping(address => uint256) public rewards;
     mapping(address => uint256) public userUpdatedAt;
 
-    // Total staked
-    uint256 public totalSupply;
-    // User address => staked amount
-    mapping(address => uint256) public balanceOf;
-
     constructor(
-        address _stakingToken,
-        address _rewardToken,
+        address _config,
         address _boost
     ) {
-        owner = msg.sender;
-        stakingToken = IERC20(_stakingToken);
-        rewardsToken = IesLBR(_rewardToken);
+        configurator = Iconfigurator(_config);
         esLBRBoost = IesLBRBoost(_boost);
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not authorized");
-        _;
+    function setEsLBR(address _eslbr) external onlyOwner {
+        esLBR = _eslbr;
     }
 
-    // Update user's claimable reward data and record the timestamp.
+    function setBoost(address _boost) external onlyOwner {
+        esLBRBoost = IesLBRBoost(_boost);
+    }
+
+    function setRewardsDuration(uint256 _duration) external onlyOwner {
+        require(finishAt < block.timestamp, "reward duration not finished");
+        duration = _duration;
+    }
+
+    function totalStaked() internal view returns (uint256) {
+        return ICrossChainPool(configurator.crossChainPool()).totalStaked();
+    }
+
+    function stakedOf(address user) public view returns (uint256) {
+        return ICrossChainPool(configurator.crossChainPool()).stakedOf(user);
+    }
+
     modifier updateReward(address _account) {
         rewardPerTokenStored = rewardPerToken();
         updatedAt = lastTimeRewardApplicable();
@@ -71,41 +95,29 @@ contract StakingRewardsV2 {
             userRewardPerTokenPaid[_account] = rewardPerTokenStored;
             userUpdatedAt[_account] = block.timestamp;
         }
+
         _;
     }
 
-    // Returns the last time the reward was applicable
     function lastTimeRewardApplicable() public view returns (uint256) {
         return _min(finishAt, block.timestamp);
     }
 
-    // Calculates and returns the reward per token
     function rewardPerToken() public view returns (uint256) {
-        if (totalSupply == 0) {
+        if (totalStaked() == 0) {
             return rewardPerTokenStored;
         }
 
         return
             rewardPerTokenStored +
             (rewardRate * (lastTimeRewardApplicable() - updatedAt) * 1e18) /
-            totalSupply;
+            totalStaked();
     }
 
-    // Allows users to stake a specified amount of tokens
-    function stake(uint256 _amount) external updateReward(msg.sender) {
-        require(_amount > 0, "amount = 0");
-        bool success = stakingToken.transferFrom(msg.sender, address(this), _amount);
-        require(success, "TF");
-        balanceOf[msg.sender] += _amount;
-        totalSupply += _amount;
-    }
-
-    // Allows users to withdraw a specified amount of staked tokens
-    function withdraw(uint256 _amount) external updateReward(msg.sender) {
-        require(_amount > 0, "amount = 0");
-        balanceOf[msg.sender] -= _amount;
-        totalSupply -= _amount;
-        stakingToken.transfer(msg.sender, _amount);
+    /**
+     * @notice Update user's claimable reward data and record the timestamp.
+     */
+    function refreshReward(address _account) external updateReward(_account) {
     }
 
     function getBoost(address _account) public view returns (uint256) {
@@ -116,16 +128,14 @@ contract StakingRewardsV2 {
         );
     }
 
-    // Calculates and returns the earned rewards for a user
     function earned(address _account) public view returns (uint256) {
         return
-            ((balanceOf[_account] *
+            ((stakedOf(_account) *
                 getBoost(_account) *
                 (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) +
             rewards[_account];
     }
 
-    // Allows users to claim their earned rewards
     function getReward() external updateReward(msg.sender) {
         require(
             block.timestamp >= esLBRBoost.getUnlockTime(msg.sender),
@@ -134,33 +144,23 @@ contract StakingRewardsV2 {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
-            rewardsToken.mint(msg.sender, reward);
+            lybraFund.refreshReward(msg.sender);
+            IesLBR(esLBR).mint(msg.sender, reward);
         }
     }
 
-    // Allows the owner to set the rewards duration
-    function setRewardsDuration(uint256 _duration) external onlyOwner {
-        require(finishAt < block.timestamp, "reward duration not finished");
-        duration = _duration;
-    }
-
-    // Allows the owner to set the boost contract address
-    function setBoost(address _boost) external onlyOwner {
-        esLBRBoost = IesLBRBoost(_boost);
-    }
-
-    // Allows the owner to set the mining rewards.
-    function notifyRewardAmount(uint256 _amount)
+    function notifyRewardAmount(uint256 amount)
         external
         onlyOwner
         updateReward(address(0))
     {
+        require(amount > 0, "amount = 0");
         if (block.timestamp >= finishAt) {
-            rewardRate = _amount / duration;
+            rewardRate = amount / duration;
         } else {
             uint256 remainingRewards = (finishAt - block.timestamp) *
                 rewardRate;
-            rewardRate = (_amount + remainingRewards) / duration;
+            rewardRate = (amount + remainingRewards) / duration;
         }
 
         require(rewardRate > 0, "reward rate = 0");

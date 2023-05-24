@@ -2,8 +2,9 @@
 
 pragma solidity ^0.8.17;
 
-import "../interfaces/ILybra.sol";
+import "../interfaces/Iconfigurator.sol";
 import "../interfaces/IEUSD.sol";
+import "../interfaces/ILybra.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -13,33 +14,40 @@ interface IStakingRewards {
 }
 
 contract LybraHelper is Ownable {
-    address[] pools;
+    Iconfigurator public immutable configurator;
+    address[] public pools;
     address public lido;
-    ILybra stETHPool;
-    IEUSD EUSD;
+    address public ethlbrStakePool;
+    address public ethlbrLpToken;
     AggregatorV3Interface internal priceFeed =
         AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
 
-    constructor(address _lido,address _eusd, address _stETHPool) {
+    constructor(address _lido,address _config) {
         lido = _lido;
-        stETHPool = ILybra(_stETHPool);
-        EUSD = IEUSD(_eusd);
+        configurator = Iconfigurator(_config);
     }
 
-    function setPool(address[] memory _pools) external onlyOwner {
+    function setPools(address[] memory _pools) external onlyOwner {
         pools = _pools;
     }
+    function setEthlbrStakePool(address _pool, address _lp) external onlyOwner {
+        ethlbrStakePool = _pool;
+        ethlbrLpToken = _lp;
+    }
 
-    function getEtherPrice() public view returns (uint256) {
-        // prettier-ignore
-        (
-            /* uint80 roundID */,
-            int price,
-            /*uint startedAt*/,
-            /*uint timeStamp*/,
-            /*uint80 answeredInRound*/
-        ) = priceFeed.latestRoundData();
-        return uint256(price);
+    function getAssetPrice(address pool) public view returns (uint256) {
+        if(ILybra(pool).getBorrowType() == 1) {
+            (
+                /* uint80 roundID */,
+                int price,
+                /*uint startedAt*/,
+                /*uint timeStamp*/,
+                /*uint80 answeredInRound*/
+            ) = priceFeed.latestRoundData();
+            return uint256(price);
+        } else {
+            return 0;
+        }
     }
 
     function getTotalStakedOf(address user) external view returns (uint256) {
@@ -48,116 +56,127 @@ contract LybraHelper is Ownable {
             ILybra pool = ILybra(pools[i]);
             uint borrowed = pool.getBorrowedOf(user);
             if(pool.getBorrowType() == 1) {
-                borrowed = EUSD.getMintedEUSDByShares(borrowed);
+                borrowed = IEUSD(configurator.getEUSDAddress()).getMintedEUSDByShares(borrowed);
             }
             amount += borrowed;
         }
         return amount;
     }
 
-    function getCollateralRate(address user) public view returns (uint256) {
-        if (stETHPool.getBorrowedOf(user) == 0) return 1e22;
+    function getCollateralRate(address user, address pool) public view returns (uint256) {
+        ILybra lybraPool = ILybra(pool);
+        if(lybraPool.getBorrowType() != 0)  return 0;
+        if (lybraPool.getBorrowedOf(user) == 0) return 1e22;
         return
-            (stETHPool.depositedEther(user) * getEtherPrice() * 1e12) /
-            stETHPool.getBorrowedOf(user);
+            (lybraPool.depositedAsset(user) * getAssetPrice(pool) * 1e12) /
+            lybraPool.getBorrowedOf(user);
     }
 
-    function getExcessIncomeAmount()
+    function getExcessIncomeAmount(address pool)
         external
         view
         returns (uint256 eusdAmount)
     {
+        ILybra lybraPool = ILybra(pool);
+        if(lybraPool.getBorrowType() != 0) return 0;
+        address asset = lybraPool.getAsset();
         if (
-            IERC20(lido).balanceOf(address(stETHPool)) < stETHPool.totalDepositedEther()
+            IERC20(asset).balanceOf(address(pool)) < lybraPool.totaldepositedAsset()
         ) {
             eusdAmount = 0;
         } else {
             eusdAmount =
-                ((IERC20(lido).balanceOf(address(stETHPool)) -
-                    stETHPool.totalDepositedEther()) * getEtherPrice()) /
+                ((IERC20(asset).balanceOf(pool) -
+                    lybraPool.totaldepositedAsset()) * getAssetPrice(pool)) /
                 1e8;
         }
     }
 
-    function getOverallCollateralRate() public view returns (uint256) {
+    function getOverallCollateralRate(address pool) public view returns (uint256) {
+        ILybra lybraPool = ILybra(pool);
         return
-            (stETHPool.totalDepositedEther() * getEtherPrice() * 1e12) /
-            stETHPool.totalSupply();
+            (lybraPool.totaldepositedAsset() * getAssetPrice(pool) * 1e12) /
+            lybraPool.poolTotalEUSDCirculation();
     }
 
-    function getLiquidateableAmount(address user)
+    function getLiquidateableAmount(address user, address pool)
         external
         view
         returns (uint256 etherAmount, uint256 eusdAmount)
     {
-        if (getCollateralRate(user) > 150 * 1e18) return (0, 0);
+        ILybra lybraPool = ILybra(pool);
+        if (getCollateralRate(user, pool) > 150 * 1e18) return (0, 0);
         if (
-            getCollateralRate(user) >= 125 * 1e18 ||
-            getOverallCollateralRate() >= 150 * 1e18
+            getCollateralRate(user, pool) >= 125 * 1e18 ||
+            getOverallCollateralRate(pool) >= 150 * 1e18
         ) {
-            etherAmount = stETHPool.depositedEther(user) / 2;
-            eusdAmount = (etherAmount * getEtherPrice()) / 1e8;
+            etherAmount = lybraPool.depositedAsset(user) / 2;
+            eusdAmount = (etherAmount * getAssetPrice(pool)) / 1e8;
         } else {
-            etherAmount = stETHPool.depositedEther(user);
-            eusdAmount = (etherAmount * getEtherPrice()) / 1e8;
-            if (getCollateralRate(user) >= 1e20) {
-                eusdAmount = (eusdAmount * 1e20) / getCollateralRate(user);
+            etherAmount = lybraPool.depositedAsset(user);
+            eusdAmount = (etherAmount * getAssetPrice(pool)) / 1e8;
+            if (getCollateralRate(user, pool) >= 1e20) {
+                eusdAmount = (eusdAmount * 1e20) / getCollateralRate(user, pool);
             }
         }
     }
 
-    function getRedeemableAmount(address user) external view returns (uint256) {
-        if (!stETHPool.isRedemptionProvider(user)) return 0;
-        return stETHPool.getBorrowedOf(user);
-    }
+    // function getRedeemableAmount(address user) external view returns (uint256) {
+    //     if (!stETHPool.isRedemptionProvider(user)) return 0;
+    //     return stETHPool.getBorrowedOf(user);
+    // }
 
-    function getRedeemableAmounts(address[] calldata users)
-        external
-        view
-        returns (uint256[] memory amounts)
-    {
-        amounts = new uint256[](users.length);
-        for (uint256 i = 0; i < users.length; i++) {
-            if (!stETHPool.isRedemptionProvider(users[i])) amounts[i] = 0;
-            amounts[i] = stETHPool.getBorrowedOf(users[i]);
-        }
-    }
+    // function getRedeemableAmounts(address[] calldata users)
+    //     external
+    //     view
+    //     returns (uint256[] memory amounts)
+    // {
+    //     amounts = new uint256[](users.length);
+    //     for (uint256 i = 0; i < users.length; i++) {
+    //         if (!stETHPool.isRedemptionProvider(users[i])) amounts[i] = 0;
+    //         amounts[i] = stETHPool.getBorrowedOf(users[i]);
+    //     }
+    // }
 
     function getLiquidateFund(address user, address pool)
         external
         view
         returns (uint256 eusdAmount)
     {
-        uint256 appro = EUSD.allowance(user, address(pool));
+        uint256 appro = IEUSD(configurator.getEUSDAddress()).allowance(user, address(pool));
         if (appro == 0) return 0;
-        uint256 bal = stETHPool.balanceOf(user);
+        uint256 bal = IEUSD(configurator.getEUSDAddress()).balanceOf(user);
         eusdAmount = appro > bal ? bal : appro;
     }
 
-    function getWithdrawableAmount(address user)
+    function getWithdrawableAmount(address user, address pool)
         external
         view
         returns (uint256)
     {
-        if (stETHPool.getBorrowedOf(user) == 0) return stETHPool.depositedEther(user);
-        if (getCollateralRate(user) <= 160 * 1e18) return 0;
+        ILybra lybraPool = ILybra(pool);
+        if (lybraPool.getBorrowedOf(user) == 0) return lybraPool.depositedAsset(user);
+        uint256 safeCollateralRate = lybraPool.safeCollateralRate();
+        if (getCollateralRate(user, pool) <= safeCollateralRate) return 0;
         return
-            (stETHPool.depositedEther(user) *
-                (getCollateralRate(user) - 160 * 1e18)) /
-            getCollateralRate(user);
+            (lybraPool.depositedAsset(user) *
+                (getCollateralRate(user, pool) - safeCollateralRate)) /
+            getCollateralRate(user, pool);
     }
 
-    function getEusdMintableAmount(address user)
+    function getEusdMintableAmount(address user, address pool)
         external
         view
         returns (uint256 eusdAmount)
     {
-        if (getCollateralRate(user) <= 160 * 1e18) return 0;
+        ILybra lybraPool = ILybra(pool);
+        uint256 safeCollateralRate = lybraPool.safeCollateralRate();
+        if (getCollateralRate(user, pool) <= safeCollateralRate) return 0;
         return
-            (stETHPool.depositedEther(user) * getEtherPrice()) /
-            1e6 /
-            160 -
-            stETHPool.getBorrowedOf(user);
+            (lybraPool.depositedAsset(user) * getAssetPrice(pool)) /
+            1e24 /
+            safeCollateralRate -
+            lybraPool.getBorrowedOf(user);
     }
 
     function getStakingPoolAPR(
@@ -177,6 +196,14 @@ contract LybraHelper is Ownable {
     function getTokenPrice(address token, address UniPool, address wethAddress) external view returns (uint256 price) {
         uint256 token_in_pool = IERC20(token).balanceOf(UniPool);
         uint256 weth_in_pool = IERC20(wethAddress).balanceOf(UniPool);
-        price = weth_in_pool * getEtherPrice() * 1e10 / token_in_pool;
+        price = weth_in_pool * getAssetPrice(msg.sender) * 1e10 / token_in_pool;
+    }
+
+    function stakedLBRValue(address user) external view returns (uint256) {
+        uint256 totalLp = IERC20(ethlbrLpToken).totalSupply();
+        uint256 lpInethlbrStakePool = IERC20(ethlbrLpToken).balanceOf(ethlbrStakePool);
+        uint256 lbrInLp = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2).balanceOf(ethlbrLpToken) * getAssetPrice(msg.sender) / 1e8;
+        uint256 userStaked = IERC20(ethlbrStakePool).balanceOf(user);
+        return userStaked * lbrInLp * lpInethlbrStakePool / totalLp / IERC20(ethlbrStakePool).totalSupply();
     }
 }

@@ -52,7 +52,7 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
             _mintEUSD(msg.sender, msg.sender, mintAmount, etherPrice);
         }
 
-        emit DepositEther(msg.sender, msg.sender, msg.value, block.timestamp);
+        emit DepositEther(msg.sender, msg.value, block.timestamp);
     }
 
     /**
@@ -72,7 +72,7 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
             address(this),
             assetAmount
         );
-        require(success, "");
+        require(success, "TF");
 
         totalDepositedAsset += assetAmount;
         depositedAsset[msg.sender] += assetAmount;
@@ -83,7 +83,6 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
             _mintEUSD(msg.sender, msg.sender, mintAmount, assetPrice);
         }
         emit DepositAsset(
-            msg.sender,
             address(lido),
             msg.sender,
             assetAmount,
@@ -296,7 +295,8 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
         uint256 income = feeStored + _newFee();
 
         if (payAmount > income) {
-            EUSD.transferFrom(msg.sender, address(configurator), income);
+            bool success = EUSD.transferFrom(msg.sender, address(configurator), income);
+            require(success, "TF");
 
             try configurator.distributeDividends() {} catch {}
 
@@ -316,7 +316,8 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
                 block.timestamp
             );
         } else {
-            EUSD.transferFrom(msg.sender, address(configurator), payAmount);
+            bool success = EUSD.transferFrom(msg.sender, address(configurator), payAmount);
+            require(success, "TF");
             try configurator.distributeDividends() {} catch {}
             feeStored = income - payAmount;
             emit FeeDistribution(
@@ -428,5 +429,9 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
 
     function getAssetPrice() public override returns (uint256) {
         return _etherPrice();
+    }
+
+    function getAsset() external view override returns (address) {
+        return address(lido);
     }
 }

@@ -3,6 +3,7 @@
 pragma solidity ^0.8.17;
 
 import "../governance/governance.sol";
+import "../interfaces/IEUSD.sol";
 
 interface DividendPool {
     function notifyRewardAmount(uint256 amount) external;
@@ -10,11 +11,6 @@ interface DividendPool {
 
 interface IeUSDMiningIncentives {
     function refreshReward(address user) external;
-}
-
-interface IEUSD {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address to, uint256 amount) external returns (bool);
 }
 
 contract Configurator is Governance {
@@ -35,6 +31,11 @@ contract Configurator is Governance {
     IeUSDMiningIncentives public eUSDMiningIncentives;
     DividendPool public lybraDividendPool;
     IEUSD public EUSD;
+    address public crossChainPool;
+    address public crossChainIncentives;
+    uint256 public crossChainFlashloanFee = 500;
+    // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
+    uint256 maxL2Ratio = 5000;
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRateChanged(address indexed pool, uint256 newRatio);
@@ -43,6 +44,15 @@ contract Configurator is Governance {
     event EUSDMiningIncentivesChanged(address indexed pool, uint256 timestamp);
     event BorrowApyChanged(address indexed pool, uint256 newApy);
     event KeeperRateChanged(address indexed pool, uint256 newSlippage);
+
+    /// @notice Emitted when the fees for flash loaning a token have been updated
+	/// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
+	event FlashloanFeeUpdated(uint256 fee);
+
+
+    /// @notice Thrown when trying to update token fees to an invalid percentage
+	error InvalidPercentage();
+   
 
     constructor(address _dao) Governance(_dao) {
 
@@ -60,6 +70,10 @@ contract Configurator is Governance {
         mintPoolMaxSupply[pool] = maxSupply;
     }
 
+    function setCrossChainPool(address _pool) external onlyRole(DAO) {
+        crossChainPool = _pool;
+    }
+
     function setDividendPool(address addr) external checkRole(TIMELOCK) {
         lybraDividendPool = DividendPool(addr);
         emit DividendPoolChanged(addr, block.timestamp);
@@ -70,13 +84,14 @@ contract Configurator is Governance {
         emit EUSDMiningIncentivesChanged(addr, block.timestamp);
     }
 
+    function setPoolBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK){
+        poolBurnPaused[pool] = isActive;
+    }
+
     function setPoolMintPaused(address pool, bool isActive) external checkRole(ADMIN){
         poolMintPaused[pool] = isActive;
     }
 
-    function setPoolBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK){
-        poolBurnPaused[pool] = isActive;
-    }
 
     /**
      * @notice DAO sets RedemptionFee, 100 means 1%
@@ -120,6 +135,22 @@ contract Configurator is Governance {
         }
     }
 
+    function setCrossChainIncentives(address _pool) external checkRole(TIMELOCK) {
+        crossChainIncentives = _pool;
+    }
+
+    function setMaxL2Ratio(uint256 _ratio) external checkRole(TIMELOCK) {
+        maxL2Ratio = _ratio;
+    }
+
+    /// @notice Update the fee percentage for WeUSD, only available to the manager of the contract
+	/// @param fee The fee percentage for this token, multiplied by 100 (for example, 10% is 10_00)
+	function setFees(uint256 fee) external checkRole(TIMELOCK) {
+		if (fee > 10_000) revert InvalidPercentage();
+		emit FlashloanFeeUpdated(fee);
+        crossChainFlashloanFee = fee;
+	}
+
     /**
      * @notice User chooses to become a Redemption Provider
      */
@@ -141,6 +172,10 @@ contract Configurator is Governance {
         }
     }
 
+    function getEUSDAddress() external view returns(address) {
+        return address(EUSD);
+    }
+
     function getDividendPool() external view returns(address) {
         return address(lybraDividendPool);
     }
@@ -152,6 +187,10 @@ contract Configurator is Governance {
 
     function isRedemptionProvider(address user) external view returns (bool) {
         return redemptionProvider[user];
+    }
+
+    function getWeUSDMaxSupplyOnL2() external view returns (uint256) {
+        return EUSD.getSharesByMintedEUSD(EUSD.totalSupply() * maxL2Ratio / 10000);
     }
 
 }

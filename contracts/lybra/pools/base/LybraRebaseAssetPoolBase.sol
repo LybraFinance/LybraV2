@@ -29,14 +29,12 @@ contract LybraRebaseAssetPoolBase is Ownable {
     uint256 public feeStored;
 
     event DepositEther(
-        address sponsor,
         address indexed onBehalfOf,
         uint256 amount,
         uint256 timestamp
     );
 
     event DepositAsset(
-        address sponsor,
         address asset,
         address indexed onBehalfOf,
         uint256 amount,
@@ -270,6 +268,8 @@ contract LybraRebaseAssetPoolBase is Ownable {
     function getPoolTotalEUSDCirculation() external view returns (uint256) {
         return poolTotalEUSDCirculation;
     }
+
+    function getAsset() external view virtual returns (address) {}
 
     function getAssetPrice() public virtual returns (uint256) {}
 }

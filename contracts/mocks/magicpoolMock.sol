@@ -95,7 +95,8 @@ contract LybraMagicPoolMock is Ownable {
 
 		eUSD.transferShares(address(receiver), share);
 		receiver.onFlashLoan(amount, data);
-        eUSD.transferFrom(address(receiver), address(this), eUSD.getMintedEUSDByShares(share));
+        bool success = eUSD.transferFrom(address(receiver), address(this), eUSD.getMintedEUSDByShares(share));
+        require(success, "TF");
 
         uint256 reward = stETH.balanceOf(address(this)) - currentLidoBalance;
         if(reward < getFee(amount)) revert FeesNotReturned();
@@ -210,7 +211,7 @@ interface ILybra {
 
     function sharesOf(address account) external view returns (uint256);
 
-    function totalDepositedEther() external view returns (uint256);
+    function totaldepositedAsset() external view returns (uint256);
 
     function safeCollateralRate() external view returns (uint256);
 
@@ -218,7 +219,7 @@ interface ILybra {
 
     function keeperRate() external view returns (uint256);
 
-    function depositedEther(address user) external view returns (uint256);
+    function depositedAsset(address user) external view returns (uint256);
 
     function getBorrowedOf(address user) external view returns (uint256);
 

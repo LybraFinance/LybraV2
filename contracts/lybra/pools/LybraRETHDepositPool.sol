@@ -22,21 +22,21 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
     }
 
     function depositAssetToMint(
-        uint256 stakeAssetAmount,
+        uint256 assetAmount,
         uint256 mintAmount
     ) external override{
-        require(stakeAssetAmount >= 1 ether, "Deposit should not be less than 1 rETH.");
+        require(assetAmount >= 1 ether, "Deposit should not be less than 1 rETH.");
         uint256 preBalance = rETH.balanceOf(address(this));
-        rETH.transferFrom(msg.sender, address(this), stakeAssetAmount);
-        require(rETH.balanceOf(address(this)) >= preBalance + stakeAssetAmount, "");
+        rETH.transferFrom(msg.sender, address(this), assetAmount);
+        require(rETH.balanceOf(address(this)) >= preBalance + assetAmount, "");
 
 
-        depositedAsset[msg.sender] += stakeAssetAmount;
+        depositedAsset[msg.sender] += assetAmount;
         if (mintAmount > 0) {
             uint256 assetPrice = getAssetPrice();
             _mintEUSD(msg.sender, msg.sender, mintAmount, assetPrice);
         }
-        emit DepositAsset(msg.sender, msg.sender, stakeAssetAmount, block.timestamp);
+        emit DepositAsset(msg.sender, address(rETH), assetAmount, block.timestamp);
     }
 
     /**
@@ -59,7 +59,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         if (borrowedShares[msg.sender] > 0) {
             _checkHealth(msg.sender, getAssetPrice());
         }
-        emit WithdrawAsset(msg.sender, onBehalfOf, amount, block.timestamp);
+        emit WithdrawAsset(msg.sender, address(rETH), onBehalfOf, amount, block.timestamp);
     }
 
     /**
@@ -74,7 +74,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
     function liquidation(
         address provider,
         address onBehalfOf,
-        uint256 stakeAssetAmount
+        uint256 assetAmount
     ) external override {
         uint256 assetPrice = getAssetPrice();
         uint256 onBehalfOfCollateralRate = (depositedAsset[onBehalfOf] *
@@ -86,17 +86,17 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         );
 
         require(
-            stakeAssetAmount * 2 <= depositedAsset[onBehalfOf],
+            assetAmount * 2 <= depositedAsset[onBehalfOf],
             "a max of 50% collateral can be liquidated"
         );
-        uint256 eusdAmount = (stakeAssetAmount * assetPrice) / 1e18;
+        uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
         require(
             EUSD.allowance(provider, address(this)) >= eusdAmount,
             "provider should authorize to provide liquidation EUSD"
         );
 
         _repay(provider, onBehalfOf, eusdAmount);
-        uint256 reducedAsset = (stakeAssetAmount * 11) / 10;
+        uint256 reducedAsset = (assetAmount * 11) / 10;
         depositedAsset[onBehalfOf] -= reducedAsset;
         uint256 reward2keeper;
         if (provider == msg.sender) {
@@ -130,7 +130,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
     function superLiquidation(
         address provider,
         address onBehalfOf,
-        uint256 stakeAssetAmount
+        uint256 assetAmount
     ) external override {
         uint256 assetPrice = getAssetPrice();
         require(
@@ -146,10 +146,10 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
             "borrowers collateralRate should below 125%"
         );
         require(
-            stakeAssetAmount <= depositedAsset[onBehalfOf],
+            assetAmount <= depositedAsset[onBehalfOf],
             "total of collateral can be liquidated at most"
         );
-        uint256 eusdAmount = (stakeAssetAmount * assetPrice) / 1e18;
+        uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
         if (onBehalfOfCollateralRate >= 1e20) {
             eusdAmount = (eusdAmount * 1e20) / onBehalfOfCollateralRate;
         }
@@ -160,25 +160,25 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
 
         _repay(provider, onBehalfOf, eusdAmount);
 
-        depositedAsset[onBehalfOf] -= stakeAssetAmount;
+        depositedAsset[onBehalfOf] -= assetAmount;
         uint256 reward2keeper;
         if (
             msg.sender != provider &&
             onBehalfOfCollateralRate >= 1e20 + configurator.poolKeeperRate(address(this)) * 1e18
         ) {
             reward2keeper =
-                ((stakeAssetAmount * configurator.poolKeeperRate(address(this))) * 1e18) /
+                ((assetAmount * configurator.poolKeeperRate(address(this))) * 1e18) /
                 onBehalfOfCollateralRate;
             rETH.transfer(msg.sender, reward2keeper);
         }
-        rETH.transfer(provider, stakeAssetAmount - reward2keeper);
+        rETH.transfer(provider, assetAmount - reward2keeper);
 
         emit LiquidationRecord(
             provider,
             msg.sender,
             onBehalfOf,
             eusdAmount,
-            stakeAssetAmount,
+            assetAmount,
             reward2keeper,
             true,
             block.timestamp
@@ -263,11 +263,13 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
             borrowedShares[_onBehalfOf] -= (sharesAmount - totalFee);
             feeStored[_onBehalfOf] = 0;
             uint256 feeAmount = EUSD.getMintedEUSDByShares(totalFee);
-            EUSD.transferFrom(_provider, address(configurator), feeAmount);
+            bool success = EUSD.transferFrom(_provider, address(configurator), feeAmount);
+            require(success, "TF");
             EUSD.burn(_provider, amount - feeAmount);
         } else {
             feeStored[_onBehalfOf] = totalFee - sharesAmount;
-            EUSD.transferFrom(_provider, address(configurator), EUSD.getMintedEUSDByShares(sharesAmount));
+            bool success = EUSD.transferFrom(_provider, address(configurator), EUSD.getMintedEUSDByShares(sharesAmount));
+            require(success, "TF");
         }
         try configurator.distributeDividends() {} catch {}
 
@@ -290,6 +292,10 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
         return etherPrice * rETH.getEthValue(1e18) / 1e18;
 
+    }
+
+    function getAsset() external view override returns (address) {
+        return address(rETH);
     }
 
 }

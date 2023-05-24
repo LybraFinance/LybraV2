@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
+import "../lybra/interfaces/Iconfigurator.sol";
 /**
  * @title Interest-bearing ERC20-like token for Lybra protocol.
  *
@@ -34,13 +35,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * pooled Ether increases, no `Transfer` events are generated: doing so would require
  * emitting an event for each token holder and thus running an unbounded loop.
  */
-abstract contract mockEUSD is IERC20, Ownable {
+contract EUSDMock is IERC20, Context {
     using SafeMath for uint256;
+    Iconfigurator public immutable configurator;
     uint256 private _totalShares;
     uint256 private _totalSupply;
-    mapping(address => bool) mintPool;
-    mapping(address => bool) poolMintPaused;
-    mapping(address => bool) poolBurnPaused;
+
     /**
      * @dev EUSD balances are dynamic and are calculated based on the accounts' shares
      * and the total supply by the protocol. Account shares aren't
@@ -87,16 +87,23 @@ abstract contract mockEUSD is IERC20, Ownable {
     );
 
     modifier onlyMintPool() {
-        require(mintPool[msg.sender], "");
+        require(configurator.mintPool(msg.sender), "");
         _;
     }
     modifier MintPaused() {
-        require(!poolMintPaused[msg.sender], "");
+        require(!configurator.poolMintPaused(msg.sender), "");
         _;
     }
     modifier BurnPaused() {
-        require(!poolBurnPaused[msg.sender], "");
+        require(!configurator.poolBurnPaused(msg.sender), "");
         _;
+    }
+
+    constructor(address _config) {
+        configurator = Iconfigurator(_config);
+        _totalShares = 1e24;
+        shares[msg.sender] = 1e24;
+        _totalSupply = 11e23;
     }
 
     /**
@@ -241,7 +248,9 @@ abstract contract mockEUSD is IERC20, Ownable {
         uint256 amount
     ) public returns (bool) {
         address spender = _msgSender();
-        _spendAllowance(from, spender, amount);
+        if(!configurator.mintPool(spender)) {
+            _spendAllowance(from, spender, amount);
+        }
         _transfer(from, to, amount);
         return true;
     }
@@ -454,7 +463,7 @@ abstract contract mockEUSD is IERC20, Ownable {
     function mint(
         address _recipient,
         uint256 _mintAmount
-    ) public returns (uint256 newTotalShares) {
+    ) external onlyMintPool MintPaused returns (uint256 newTotalShares) {
         require(_recipient != address(0), "MINT_TO_THE_ZERO_ADDRESS");
 
         uint256 sharesAmount = getSharesByMintedEUSD(_mintAmount);
@@ -469,12 +478,8 @@ abstract contract mockEUSD is IERC20, Ownable {
         shares[_recipient] = shares[_recipient].add(sharesAmount);
 
         _totalSupply += _mintAmount;
-        // Notice: we're not emitting a Transfer event from the zero address here since shares mint
-        // works by taking the amount of tokens corresponding to the minted shares from all other
-        // token holders, proportionally to their share. The total supply of the token doesn't change
-        // as the result. This is equivalent to performing a send from each other token holder's
-        // address to `address`, but we cannot reflect this as it would require sending an unbounded
-        // number of events.
+
+        emit Transfer(address(0), _recipient, _mintAmount);
     }
     
 
@@ -490,38 +495,14 @@ abstract contract mockEUSD is IERC20, Ownable {
      */
     function burn(
         address _account,
-        uint256 burnAmount
+        uint256 _burnAmount
     ) external onlyMintPool BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
-        uint256 sharesAmount = getSharesByMintedEUSD(burnAmount);
+        uint256 sharesAmount = getSharesByMintedEUSD(_burnAmount);
+        newTotalShares = _onlyBurnShares(_account, sharesAmount);
+        _totalSupply -= _burnAmount;
 
-        uint256 accountShares = shares[_account];
-        require(sharesAmount <= accountShares, "BURN_AMOUNT_EXCEEDS_BALANCE");
-
-        uint256 preRebaseTokenAmount = getMintedEUSDByShares(sharesAmount);
-
-        newTotalShares = _totalShares.sub(sharesAmount);
-        _totalShares = newTotalShares;
-
-        shares[_account] = accountShares.sub(sharesAmount);
-
-        uint256 postRebaseTokenAmount = getMintedEUSDByShares(sharesAmount);
-        _totalSupply -= burnAmount;
-
-        emit SharesBurnt(
-            _account,
-            preRebaseTokenAmount,
-            postRebaseTokenAmount,
-            sharesAmount
-        );
-
-        // Notice: we're not emitting a Transfer event to the zero address here since shares burn
-        // works by redistributing the amount of tokens corresponding to the burned shares between
-        // all other token holders. The total supply of the token doesn't change as the result.
-        // This is equivalent to performing a send from `address` to each other token holder address,
-        // but we cannot reflect this as it would require sending an unbounded number of events.
-
-        // We're emitting `SharesBurnt` event to provide an explicit rebase log record nonetheless.
+        emit Transfer(_account, address(0), _burnAmount);
     }
 
     /**
@@ -536,27 +517,30 @@ abstract contract mockEUSD is IERC20, Ownable {
      */
     function burnShares(
         address _account,
-        uint256 sharesAmount
+        uint256 _sharesAmount
     ) external onlyMintPool BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
+        newTotalShares = _onlyBurnShares(_account, _sharesAmount);
+    }
 
+    function _onlyBurnShares( address _account, uint256 _sharesAmount) private returns(uint256 newTotalShares){
         uint256 accountShares = shares[_account];
-        require(sharesAmount <= accountShares, "BURN_AMOUNT_EXCEEDS_BALANCE");
+        require(_sharesAmount <= accountShares, "BURN_AMOUNT_EXCEEDS_BALANCE");
 
-        uint256 preRebaseTokenAmount = getMintedEUSDByShares(sharesAmount);
+        uint256 preRebaseTokenAmount = getMintedEUSDByShares(_sharesAmount);
 
-        newTotalShares = _totalShares.sub(sharesAmount);
+        newTotalShares = _totalShares.sub(_sharesAmount);
         _totalShares = newTotalShares;
 
-        shares[_account] = accountShares.sub(sharesAmount);
+        shares[_account] = accountShares.sub(_sharesAmount);
 
-        uint256 postRebaseTokenAmount = getMintedEUSDByShares(sharesAmount);
+        uint256 postRebaseTokenAmount = getMintedEUSDByShares(_sharesAmount);
 
         emit SharesBurnt(
             _account,
             preRebaseTokenAmount,
             postRebaseTokenAmount,
-            sharesAmount
+            _sharesAmount
         );
 
         // Notice: we're not emitting a Transfer event to the zero address here since shares burn
@@ -566,19 +550,10 @@ abstract contract mockEUSD is IERC20, Ownable {
         // but we cannot reflect this as it would require sending an unbounded number of events.
 
         // We're emitting `SharesBurnt` event to provide an explicit rebase log record nonetheless.
+
     }
 
-    function setMintPool(address _pool, bool _isActive) external onlyOwner{
-        mintPool[_pool] = _isActive;
-    }
-
-    function setPoolMintPaused(address _pool, bool _isActive) external onlyOwner{
-        poolMintPaused[_pool] = _isActive;
-    }
-
-    function setPoolBurnPaused(address _pool, bool _isActive) external onlyOwner{
-        poolBurnPaused[_pool] = _isActive;
-    }
+    
 
     
 }

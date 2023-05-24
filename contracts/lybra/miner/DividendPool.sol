@@ -11,10 +11,11 @@ pragma solidity ^0.8.17;
  */
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../interfaces/ILybra.sol";
+import "../interfaces/IEUSD.sol";
+import "../interfaces/Iconfigurator.sol";
 import "../interfaces/IesLBR.sol";
 contract DividendPool is Ownable {
-    ILybra public lybra;
+    Iconfigurator public immutable configurator;
     IesLBR public esLBR;
     IesLBR public LBR;
 
@@ -27,24 +28,15 @@ contract DividendPool is Ownable {
     mapping(address => uint) public time2fullRedemption;
     mapping(address => uint) public unstakeRate;
     mapping(address => uint) public lastWithdrawTime;
-    uint256 immutable exitCycle = 30 days;
-    uint256 public claimAbleTime;
+    uint256 immutable exitCycle = 60 days;
 
-    constructor(address _lybra) {
-        lybra = ILybra(_lybra);
-    }
-
-    function setLybra(address _lybra) external onlyOwner {
-        lybra = ILybra(_lybra);
+    constructor(address _config) {
+        configurator = Iconfigurator(_config);
     }
 
     function setTokenAddress(address _eslbr, address _lbr) external onlyOwner {
         esLBR = IesLBR(_eslbr);
         LBR = IesLBR(_lbr);
-    }
-
-    function setClaimAbleTime(uint256 _time) external onlyOwner {
-        claimAbleTime = _time;
     }
 
     // Total staked
@@ -57,13 +49,12 @@ contract DividendPool is Ownable {
         return esLBR.balanceOf(staker);
     }
 
-    function stake(uint256 amount) external updateReward(msg.sender) {
+    function stake(uint256 amount) external {
         LBR.burn(msg.sender, amount);
         esLBR.mint(msg.sender, amount);
     }
 
-    function unstake(uint256 amount) external updateReward(msg.sender) {
-        require(block.timestamp >= claimAbleTime, "It is not yet time to claim.");
+    function unstake(uint256 amount) external {
         esLBR.burn(msg.sender, amount);
         withdraw(msg.sender);
         uint256 total = amount;
@@ -82,7 +73,7 @@ contract DividendPool is Ownable {
         lastWithdrawTime[user] = block.timestamp;
     }
 
-    function reStake() external updateReward(msg.sender) {
+    function reStake() external {
         esLBR.mint(msg.sender, getReservedLBRForVesting(msg.sender) + getClaimAbleLBR(msg.sender));
         unstakeRate[msg.sender] = 0;
         time2fullRedemption[msg.sender] = 0;
@@ -108,7 +99,7 @@ contract DividendPool is Ownable {
     }
 
     function getClaimAbleUSD(address user) external view returns (uint256 amount) {
-        amount = lybra.getMintedEUSDByShares(earned(user));
+        amount = IEUSD(configurator.getEUSDAddress()).getMintedEUSDByShares(earned(user));
     }
 
     /**
@@ -126,7 +117,7 @@ contract DividendPool is Ownable {
         uint reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
-            lybra.transferShares(msg.sender, reward);
+            IEUSD(configurator.getEUSDAddress()).transferShares(msg.sender, reward);
         }
     }
 
@@ -136,10 +127,10 @@ contract DividendPool is Ownable {
      * Add into rewardPerTokenStored.
      */
     function notifyRewardAmount(uint amount) external {
-        require(msg.sender == address(lybra));
+        require(msg.sender == address(configurator));
         if (totalStaked() == 0) return;
         require(amount > 0, "amount = 0");
-        uint256 share = lybra.getSharesByMintedEUSD(amount);
+        uint256 share = IEUSD(configurator.getEUSDAddress()).getSharesByMintedEUSD(amount);
         rewardPerTokenStored =
             rewardPerTokenStored +
             (share * 1e18) /

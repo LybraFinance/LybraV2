@@ -3,14 +3,16 @@
 pragma solidity ^0.8.17;
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "../interfaces/Iconfigurator.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
-contract CrossChainPool is Ownable {
-    ILybra public immutable eUSD;
+contract CrossChainPool is Context {
+    IERC20 public immutable WeUSD;
     ILido public immutable stETH;
-    IesLBRMinter public esLBRMinter;
-    AggregatorV3Interface internal priceFeed =
-        AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+    Iconfigurator public immutable configurator;
+    // Use the ETH/USD oracle provided by Chainlink. 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
+    AggregatorV3Interface internal priceFeed;
     uint public rewardPerTokenStored;
     // User address => rewardPerTokenStored
     mapping(address => uint) public userRewardPerTokenPaid;
@@ -20,24 +22,16 @@ contract CrossChainPool is Ownable {
 
     // Total staked
     uint256 public totalStaked;
-    uint256 public flashloanFee = 500;
 
     /// ERRORS ///
 
 	/// @notice Thrown when trying to update token fees or withdraw token balance without being the manager
 	error Unauthorized();
 
-	/// @notice Thrown when trying to update token fees to an invalid percentage
-	error InvalidPercentage();
-
 	/// @notice Thrown when the additional fees are not returned before the end of the transaction
 	error FeesNotReturned();
 
 	/// EVENTS ///
-
-	/// @notice Emitted when the fees for flash loaning a token have been updated
-	/// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
-	event FeeUpdated(uint256 fee);
 
 	/// @notice Emitted when a flash loan is completed
 	/// @param receiver The contract that received the funds
@@ -45,35 +39,38 @@ contract CrossChainPool is Ownable {
 	event Flashloaned(FlashBorrower indexed receiver, uint256 amount);
 
     constructor(
-        address _eusd,
+        address _weusd,
         address _lido,
-        address _esLBRMinter
+        address _chainlinkOracle,
+        address _config
     ) {
-        eUSD = ILybra(_eusd);
+        WeUSD = IERC20(_weusd);
         stETH = ILido(_lido);
-        esLBRMinter = IesLBRMinter(_esLBRMinter);
+        priceFeed = AggregatorV3Interface(_chainlinkOracle);
+        configurator = Iconfigurator(_config);
     }
 
-    function deposit(address onBehalfOf, uint256 share) external updateReward(onBehalfOf) {
+    function deposit(address onBehalfOf, uint256 amount) external updateReward(onBehalfOf) {
         address spender = _msgSender();
-        require(spender == address(eUSD), "");
-        try esLBRMinter.refreshReward(onBehalfOf) {} catch {}
+        require(spender == address(WeUSD), "");
+        require(totalStaked + amount <= configurator.getWeUSDMaxSupplyOnL2(), "ESL");
+        try IesLBRMinter(configurator.crossChainIncentives()).refreshReward(onBehalfOf) {} catch {}
 
-        stakedOf[onBehalfOf] += share;
-        totalStaked += share;
+        stakedOf[onBehalfOf] += amount;
+        totalStaked += amount;
     }
 
     // Allows users to withdraw a specified amount of staked tokens
-    function withdraw(address user, uint256 shareAmount) external updateReward(user) {
+    function withdraw(address user, uint256 amount) external updateReward(user) {
         address caller = _msgSender();
-        require(caller == address(eUSD), "");
-        require(shareAmount > 0, "amount = 0");
+        require(caller == address(WeUSD), "");
+        require(amount > 0, "amount = 0");
 
-        try esLBRMinter.refreshReward(user) {} catch {}
+        try IesLBRMinter(configurator.crossChainIncentives()).refreshReward(user) {} catch {}
 
-        stakedOf[user] -= shareAmount;
-        totalStaked -= shareAmount;
-        eUSD.transfer(user, eUSD.getMintedEUSDByShares(shareAmount));
+        stakedOf[user] -= amount;
+        totalStaked -= amount;
+        WeUSD.transfer(user, amount);
     }
 
     /// @notice Request a flash loan
@@ -86,13 +83,13 @@ contract CrossChainPool is Ownable {
 		uint256 amount,
 		bytes calldata data
 	) public payable {
-		uint256 share = eUSD.getSharesByMintedEUSD(amount);
         uint256 currentLidoBalance = stETH.balanceOf(address(this));
 		emit Flashloaned(receiver, amount);
 
-		eUSD.transferShares(address(receiver), share);
+		WeUSD.transfer(address(receiver), amount);
 		receiver.onFlashLoan(amount, data);
-        eUSD.transferFrom(address(receiver), address(this), eUSD.getMintedEUSDByShares(share));
+        bool success = WeUSD.transferFrom(address(receiver), address(this), amount);
+        require(success, "TF");
 
         uint256 reward = stETH.balanceOf(address(this)) - currentLidoBalance;
         if(reward < getFee(amount)) revert FeesNotReturned();
@@ -103,8 +100,9 @@ contract CrossChainPool is Ownable {
 	/// @param amount The amount of tokens you're receiving
 	/// @return The amount of tokens you need to pay as a fee
 	function getFee(uint256 amount) public view returns (uint256) {
-		if (flashloanFee == 0) return 0;
-		return (amount * 1e8 / getEtherPrice() * flashloanFee) / 10_000;
+        uint256 fee = configurator.crossChainFlashloanFee();
+		if (fee == 0) return 0;
+		return (amount * 1e8 / getEtherPrice() * fee) / 10_000;
 	}
 
     function getEtherPrice() public view returns (uint256) {
@@ -117,19 +115,6 @@ contract CrossChainPool is Ownable {
             /*uint80 answeredInRound*/
         ) = priceFeed.latestRoundData();
         return uint256(price);
-    }
-
-	/// @notice Update the fee percentage for eUSD, only available to the manager of the contract
-	/// @param fee The fee percentage for this token, multiplied by 100 (for example, 10% is 10_00)
-	function setFees(uint256 fee) external onlyOwner {
-		if (fee > 10_000) revert InvalidPercentage();
-
-		emit FeeUpdated(fee);
-        flashloanFee = fee;
-	}
-
-    function getDepositedEUSD(address user) external view returns(uint256) {
-        return eUSD.getMintedEUSDByShares(stakedOf[user]);
     }
 
     function getDepositedWEUSD(address user) external view returns(uint256) {
@@ -202,52 +187,4 @@ interface FlashBorrower {
 
 interface IesLBRMinter {
     function refreshReward(address user) external;
-}
-
-interface ILybra {
-    function totalSupply() external view returns (uint256);
-
-    function balanceOf(address account) external view returns (uint256);
-
-    function sharesOf(address account) external view returns (uint256);
-
-    function totalDepositedEther() external view returns (uint256);
-
-    function safeCollateralRate() external view returns (uint256);
-
-    function redemptionFee() external view returns (uint256);
-
-    function keeperRate() external view returns (uint256);
-
-    function depositedEther(address user) external view returns (uint256);
-
-    function getBorrowedOf(address user) external view returns (uint256);
-
-    function isRedemptionProvider(address user) external view returns (bool);
-
-    function allowance(address owner, address spender) external view returns (uint256);
-
-    function transfer(
-        address _recipient,
-        uint256 _amount
-    ) external returns (bool);
-
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) external returns (bool);
-
-    function transferShares(
-        address _recipient,
-        uint256 _sharesAmount
-    ) external returns (uint256);
-
-    function getSharesByMintedEUSD(
-        uint256 _EUSDAmount
-    ) external view returns (uint256);
-
-    function getMintedEUSDByShares(
-        uint256 _sharesAmount
-    ) external view returns (uint256);
 }

@@ -6,10 +6,9 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../../OFT/BaseOFTV2.sol";
 
 contract WeUSD is BaseOFTV2, ERC20 {
-
     uint internal immutable ld2sdRate;
 
-    constructor(string memory _name, string memory _symbol, uint8 _sharedDecimals, address _lzEndpoint) ERC20(_name, _symbol) BaseOFTV2(_sharedDecimals, _lzEndpoint) {
+    constructor(uint8 _sharedDecimals, address _lzEndpoint) ERC20("Wrapped eUSD", "WeUSD") BaseOFTV2(_sharedDecimals, _lzEndpoint) {
         uint8 decimals = decimals();
         require(_sharedDecimals <= decimals, "OFT: sharedDecimals must be <= decimals");
         ld2sdRate = 10 ** (decimals - _sharedDecimals);

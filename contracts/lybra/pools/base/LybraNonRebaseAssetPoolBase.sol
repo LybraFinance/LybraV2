@@ -20,14 +20,15 @@ contract LybraNonRebaseAssetPoolBase {
     mapping(address => uint256) feeUpdatedAt;
 
     event DepositAsset(
-        address sponsor,
         address indexed onBehalfOf,
+        address asset,
         uint256 amount,
         uint256 timestamp
     );
     event WithdrawAsset(
         address sponsor,
         address indexed onBehalfOf,
+        address asset,
         uint256 amount,
         uint256 timestamp
     );
@@ -86,11 +87,11 @@ contract LybraNonRebaseAssetPoolBase {
      * Emits a `DepositAsset` event.
      *
      * Requirements:
-     * - `stakeAssetAmount` Must be higher than 0.
+     * - `assetAmount` Must be higher than 0.
      * - `mintAmount` Send 0 if doesn't mint EUSD
      */
     function depositAssetToMint(
-        uint256 stakeAssetAmount,
+        uint256 assetAmount,
         uint256 mintAmount
     ) external virtual {}
 
@@ -160,7 +161,7 @@ contract LybraNonRebaseAssetPoolBase {
     function superLiquidation(
         address provider,
         address onBehalfOf,
-        uint256 stakeAssetAmount
+        uint256 assetAmount
     ) external virtual {}
 
     /**
@@ -203,8 +204,7 @@ contract LybraNonRebaseAssetPoolBase {
         feeUpdatedAt[user] = block.timestamp;
     }
 
-    function getAssetPrice() public virtual returns (uint256) {
-    }
+    
 
     function _newFee(address user) internal view returns (uint256) {
         return
@@ -225,5 +225,10 @@ contract LybraNonRebaseAssetPoolBase {
 
     function getPoolTotalEUSDCirculation() public view returns (uint256) {
         return EUSD.getMintedEUSDByShares(poolTotalEUSDShares);
+    }
+
+    function getAsset() external view virtual returns (address) {}
+
+    function getAssetPrice() public virtual returns (uint256) {
     }
 }
