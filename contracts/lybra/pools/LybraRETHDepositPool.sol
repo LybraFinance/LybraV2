@@ -259,7 +259,7 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         uint256 amount = borrowedEUSD >= _amount ? _amount : borrowedEUSD;
         uint256 sharesAmount = EUSD.getSharesByMintedEUSD(amount);
 
-        if(sharesAmount >= totalFee) {
+        if(sharesAmount > totalFee) {
             borrowedShares[_onBehalfOf] -= (sharesAmount - totalFee);
             feeStored[_onBehalfOf] = 0;
             uint256 feeAmount = EUSD.getMintedEUSDByShares(totalFee);

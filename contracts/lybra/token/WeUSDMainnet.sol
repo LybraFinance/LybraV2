@@ -16,7 +16,8 @@ contract WeUSDMainnet is BaseOFTV2, ERC20 {
     IEUSD public immutable EUSD;
     Iconfigurator public immutable configurator;
     uint internal immutable ld2sdRate;
-    ICrossChainPool chainPool;
+
+    uint256 public totalCrossChainAmount;
 
     constructor(address _eusd, address _config, uint8 _sharedDecimals, address _lzEndpoint) ERC20("Wrapped eUSD", "WeUSD") BaseOFTV2(_sharedDecimals, _lzEndpoint) {
         EUSD = IEUSD(_eusd);
@@ -45,17 +46,36 @@ contract WeUSDMainnet is BaseOFTV2, ERC20 {
         sendFrom(msg.sender, _dstChainId, _toAddress, weUSDAmount, _callParams);
     }
 
-    function getMintAmount(uint256 eusdAmount) public view returns (uint256 weusdAmount) {
-        weusdAmount = EUSD.getSharesByMintedEUSD(eusdAmount);
-    }
-
-    function getPrice() public view returns (uint256 eusdAmount) {
-        eusdAmount = EUSD.getMintedEUSDByShares(1e18);
+    function onOFTReceived(uint16, bytes calldata, uint64, bytes32, uint _amount, bytes calldata _payload) external {
+        require(msg.sender == address(this), "");
+        address to = abi.decode(_payload, (address));
+        _burn(address(this), _amount);
+        EUSD.transferShares(to, _amount);
     }
 
     /************************************************************************
     * public functions
     ************************************************************************/
+    function sendFrom(address _from, uint16 _dstChainId, bytes32 _toAddress, uint _amount, LzCallParams calldata _callParams) public payable override {
+        require(totalCrossChainAmount + _amount <= configurator.getWeUSDMaxSupplyOnL2(), "ESL");
+        totalCrossChainAmount += _amount;
+        _send(_from, _dstChainId, _toAddress, _amount, _callParams.refundAddress, _callParams.zroPaymentAddress, _callParams.adapterParams);
+    }
+
+    function sendAndCall(address _from, uint16 _dstChainId, bytes32 _toAddress, uint _amount, bytes calldata _payload, uint64 _dstGasForCall, LzCallParams calldata _callParams) public payable override {
+        require(totalCrossChainAmount + _amount <= configurator.getWeUSDMaxSupplyOnL2(), "ESL");
+        totalCrossChainAmount += _amount;
+        _sendAndCall(_from, _dstChainId, _toAddress, _amount, _payload, _dstGasForCall, _callParams.refundAddress, _callParams.zroPaymentAddress, _callParams.adapterParams);
+    }
+
+    function getMintAmount(uint256 eusdAmount) public view returns (uint256 weusdAmount) {
+        weusdAmount = EUSD.getSharesByMintedEUSD(eusdAmount);
+    }
+
+    function getEUSDValue() public view returns (uint256 eusdAmount) {
+        eusdAmount = EUSD.getMintedEUSDByShares(1e18);
+    }
+
     function circulatingSupply() public view virtual override returns (uint) {
         return totalSupply();
     }
@@ -64,24 +84,19 @@ contract WeUSDMainnet is BaseOFTV2, ERC20 {
         return address(this);
     }
 
-    
-
     /************************************************************************
     * internal functions
     ************************************************************************/
     function _debitFrom(address _from, uint16, bytes32, uint _amount) internal virtual override returns (uint) {
         address spender = _msgSender();
         if (_from != spender) _spendAllowance(_from, spender, _amount);
-
-        _transfer(_from, configurator.crossChainPool(), _amount);
-        ICrossChainPool(configurator.crossChainPool()).deposit(_from, _amount);
+        _burn(_from, _amount);
         return _amount;
     }
 
     function _creditTo(uint16, address _toAddress, uint _amount) internal virtual override returns (uint) {
-        if(_toAddress != address(this)) {
-            ICrossChainPool(configurator.crossChainPool()).withdraw(_toAddress, _amount);
-        }
+        _mint(_toAddress, _amount);
+        totalCrossChainAmount -= _amount;
         return _amount;
     }
 
@@ -89,9 +104,7 @@ contract WeUSDMainnet is BaseOFTV2, ERC20 {
         address spender = _msgSender();
         // if transfer from this contract, no need to check allowance
         if (_from != address(this) && _from != spender) _spendAllowance(_from, spender, _amount);
-        if(_from == address(this)) {
-            ICrossChainPool(configurator.crossChainPool()).withdraw(_to, _amount);
-        } else {
+        if(_from != _to) {
             _transfer(_from, _to, _amount);
         }
         return _amount;
