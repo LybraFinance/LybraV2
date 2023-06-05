@@ -50,9 +50,9 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
      * @dev Withdraw stETH. Check user’s collateral rate after withdrawal, should be higher than `configurator.getSafeCollateralRate(address(this))`
      */
     function withdraw(address onBehalfOf, uint256 amount) external override {
-        require(onBehalfOf != address(0), "WITHDRAW_TO_THE_ZERO_ADDRESS");
+        require(onBehalfOf != address(0), "WTZ");
         require(amount > 0, "ZERO_WITHDRAW");
-        require(depositedAsset[msg.sender] >= amount, "Insufficient Balance");
+        require(depositedAsset[msg.sender] >= amount, "Withdraw amount exceeds deposited amount.");
         depositedAsset[msg.sender] -= amount;
 
         rETH.transfer(onBehalfOf, amount);

@@ -198,12 +198,4 @@ contract LybraHelper is Ownable {
         uint256 weth_in_pool = IERC20(wethAddress).balanceOf(UniPool);
         price = weth_in_pool * getAssetPrice(msg.sender) * 1e10 / token_in_pool;
     }
-
-    function stakedLBRValue(address user) external view returns (uint256) {
-        uint256 totalLp = IERC20(ethlbrLpToken).totalSupply();
-        uint256 lpInethlbrStakePool = IERC20(ethlbrLpToken).balanceOf(ethlbrStakePool);
-        uint256 lbrInLp = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2).balanceOf(ethlbrLpToken) * getAssetPrice(msg.sender) / 1e8;
-        uint256 userStaked = IERC20(ethlbrStakePool).balanceOf(user);
-        return userStaked * lbrInLp * lpInethlbrStakePool / totalLp / IERC20(ethlbrStakePool).totalSupply();
-    }
 }

@@ -29,7 +29,7 @@ import "../interfaces/Iconfigurator.sol";
  *   balanceOf(user1) -> 2 tokens which corresponds 200 EUSD
  *   balanceOf(user2) -> 8 tokens which corresponds 800 EUSD
  *
- * Since balances of all token holders change when the amount of total supplied EUSD
+ * Since balances of all token holders change when the amount of total shares
  * changes, this token cannot fully implement ERC20 standard: it only emits `Transfer`
  * events upon explicit transfer between holders. In contrast, when total amount of
  * pooled Ether increases, no `Transfer` events are generated: doing so would require
@@ -87,15 +87,15 @@ contract EUSD is IERC20, Context {
     );
 
     modifier onlyMintPool() {
-        require(configurator.mintPool(msg.sender), "");
+        require(configurator.mintPool(msg.sender), "RCP");
         _;
     }
     modifier MintPaused() {
-        require(!configurator.poolMintPaused(msg.sender), "");
+        require(!configurator.poolMintPaused(msg.sender), "MPP");
         _;
     }
     modifier BurnPaused() {
-        require(!configurator.poolBurnPaused(msg.sender), "");
+        require(!configurator.poolBurnPaused(msg.sender), "BPP");
         _;
     }
 

@@ -23,7 +23,7 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
         require(msg.value * etherPrice >= mintAmount * 1e18, "");
 
         //convert to steth
-        uint256 sharesAmount = lido.submit{value: msg.value}(owner());
+        uint256 sharesAmount = lido.submit{value: msg.value}(address(configurator));
         require(sharesAmount > 0, "ZERO_DEPOSIT");
 
         totalDepositedAsset += msg.value;
@@ -86,11 +86,11 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
         address onBehalfOf,
         uint256 assetAmount
     ) external override {
-        require(onBehalfOf != address(0), "WITHDRAW_TO_THE_ZERO_ADDRESS");
+        require(onBehalfOf != address(0), "WTZ");
         require(assetAmount > 0, "ZERO_WITHDRAW");
         require(
             depositedAsset[msg.sender] >= assetAmount,
-            "Insufficient Balance"
+            "Withdraw amount exceeds deposited amount."
         );
         totalDepositedAsset -= assetAmount;
         depositedAsset[msg.sender] -= assetAmount;
@@ -290,7 +290,7 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
                 sharesAmount = payAmount - income;
             }
             //Income is distributed to LBR staker.
-            EUSD.burnShares(msg.sender, payAmount - income);
+            EUSD.burnShares(msg.sender, sharesAmount);
             feeStored = 0;
             emit FeeDistribution(
                 address(configurator),
@@ -405,7 +405,8 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
         ) revert("collateralRate is Below safeCollateralRate");
     }
 
-    function setLockdownPeriod(uint256 _time) external onlyOwner {
+    function setLockdownPeriod(uint256 _time) external {
+        require(configurator.hasRole(keccak256("ADMIN"), msg.sender));
         lockdownPeriod = _time;
     }
 

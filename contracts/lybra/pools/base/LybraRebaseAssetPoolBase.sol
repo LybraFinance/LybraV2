@@ -4,7 +4,6 @@ pragma solidity ^0.8.17;
 
 import "../../interfaces/IEUSD.sol";
 import "../../interfaces/Iconfigurator.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface LbrStakingPool {
@@ -15,7 +14,7 @@ interface IPriceFeed {
     function fetchPrice() external returns (uint256);
 }
 
-contract LybraRebaseAssetPoolBase is Ownable {
+contract LybraRebaseAssetPoolBase {
     IEUSD public immutable EUSD;
     Iconfigurator public immutable configurator;
 

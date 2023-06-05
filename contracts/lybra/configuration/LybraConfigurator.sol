@@ -1,5 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
 
+
+/**
+ * @title Lybra Protocol V2 Configurator Contract
+ * @dev The Configurator contract is used to set various parameters and control functionalities of the Lybra Protocol. It is based on OpenZeppelin's Proxy and AccessControl libraries, allowing the DAO to control contract upgrades. There are three types of governance roles:
+ * * DAO: A time-locked contract initiated by esLBR voting, with a minimum effective period of 14 days. After the vote is passed, only the developer can execute the action.
+ * * TIMELOCK: A time-locked contract controlled by the developer, with a minimum effective period of 2 days.
+ * * ADMIN: A multisignature account controlled by the developer.
+ * All setting functions have three levels of calling permissions:
+ * * onlyRole(DAO): Only callable by the DAO for governance purposes.
+ * * checkRole(TIMELOCK): Callable by both the DAO and the TIMELOCK contract.
+ * * checkRole(ADMIN): Callable by all governance roles.
+ */
+
 pragma solidity ^0.8.17;
 
 import "../governance/governance.sol";
@@ -31,11 +44,9 @@ contract Configurator is Governance {
     IeUSDMiningIncentives public eUSDMiningIncentives;
     DividendPool public lybraDividendPool;
     IEUSD public EUSD;
-    address public crossChainPool;
-    address public crossChainIncentives;
-    uint256 public crossChainFlashloanFee = 500;
+    uint256 public flashloanFee = 500;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
-    uint256 maxL2Ratio = 5000;
+    uint256 maxStableRatio = 5_000;
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRateChanged(address indexed pool, uint256 newRatio);
@@ -44,6 +55,7 @@ contract Configurator is Governance {
     event EUSDMiningIncentivesChanged(address indexed pool, uint256 timestamp);
     event BorrowApyChanged(address indexed pool, uint256 newApy);
     event KeeperRateChanged(address indexed pool, uint256 newSlippage);
+    event esLBRMinerChanges(address indexed pool, bool status);
 
     /// @notice Emitted when the fees for flash loaning a token have been updated
 	/// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
@@ -58,43 +70,77 @@ contract Configurator is Governance {
 
     }
 
+    /**
+     * @notice Initializes the eUSD address. This function can only be executed once.
+     */
     function initEUSD(address _eusd) external onlyRole(DAO){
         if(address(EUSD) == address(0)) EUSD = IEUSD(_eusd);
     }
 
+    /**
+     * @notice Controls the activation of a specific eUSD vault.
+     * @param pool The address of the asset pool.
+     * @param isActive A boolean indicating whether to activate or deactivate the vault.
+     * @dev This function can only be called by the DAO.
+     */
     function setMintPool(address pool, bool isActive) external onlyRole(DAO){
         mintPool[pool] = isActive;
     }
 
+    /**
+     * @notice Controls the minting limit of eUSD for an asset pool.
+     * @param pool The address of the asset pool.
+     * @param maxSupply The maximum amount of eUSD that can be minted for the asset pool.
+     * @dev This function can only be called by the DAO.
+     */
     function setMintPoolMaxSupply(address pool, uint256 maxSupply) external onlyRole(DAO){
         mintPoolMaxSupply[pool] = maxSupply;
     }
 
-    function setCrossChainPool(address _pool) external onlyRole(DAO) {
-        crossChainPool = _pool;
-    }
-
+    /**
+     * @notice Sets the address of the dividend pool.
+     * @param addr The new address of the dividend pool.
+     * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
+     */
     function setDividendPool(address addr) external checkRole(TIMELOCK) {
         lybraDividendPool = DividendPool(addr);
         emit DividendPoolChanged(addr, block.timestamp);
     }
 
+    /**
+     * @notice Sets the address of the eUSDMiningIncentives pool.
+     * @param addr The new address of the eUSDMiningIncentives pool.
+     * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
+     */
     function setEUSDMiningIncentives(address addr) external checkRole(TIMELOCK) {
         eUSDMiningIncentives = IeUSDMiningIncentives(addr);
         emit EUSDMiningIncentivesChanged(addr, block.timestamp);
     }
 
+    /**
+     * @notice Enables or disables the repayment functionality for a asset pool.
+     * @param pool The address of the pool.
+     * @param isActive Boolean value indicating whether repayment is active or paused.
+     * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
+     */
     function setPoolBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK){
         poolBurnPaused[pool] = isActive;
     }
 
+    /**
+     * @notice Enables or disables the mint functionality for a asset pool.
+     * @param pool The address of the pool.
+     * @param isActive Boolean value indicating whether minting is active or paused.
+     * @dev This function can only be called by accounts with ADMIN or higher privilege.
+     */
     function setPoolMintPaused(address pool, bool isActive) external checkRole(ADMIN){
         poolMintPaused[pool] = isActive;
     }
 
-
     /**
-     * @notice DAO sets RedemptionFee, 100 means 1%
+     * @notice Sets the redemption fee.
+     * @param newFee The new fee to be set.
+     * @notice The fee cannot exceed 5%.
      */
     function setRedemptionFee(uint256 newFee) external checkRole(TIMELOCK) {
         require(newFee <= 500, "Max Redemption Fee is 5%");
@@ -103,7 +149,7 @@ contract Configurator is Governance {
     }
 
     /**
-     * @notice  safeCollateralRate can be decided by DAO,starts at 160%
+     * @notice  safeCollateralRate can be decided by TIMELOCK,starts at 160%
      */
     function setSafeCollateralRate(address pool, uint256 newRatio) external checkRole(TIMELOCK) {
         require(
@@ -114,6 +160,11 @@ contract Configurator is Governance {
         emit SafeCollateralRateChanged(pool, newRatio);
     }
 
+    /**
+     * @notice  Set the borrowing annual percentage yield (APY) for a asset pool.
+     * @param pool The address of the pool to set the borrowing APY for.
+     * @param newApy The new borrowing APY to set, limited to a maximum of 2%.
+     */
     function setBorrowApy(address pool, uint256 newApy) external checkRole(TIMELOCK) {
         require(newApy <= 200, "Borrow APY cannot exceed 2%");
         poolMintFeeApy[pool] = newApy;
@@ -121,7 +172,9 @@ contract Configurator is Governance {
     }
 
     /**
-     * @notice KeeperRate can be decided by DAO,1 means 1% of revenue
+     * @notice Set the reward rate for the liquidator after liquidation.
+     * @param pool The address of the pool to set the reward rate for.
+     * @param newRate The new reward rate to set, limited to a maximum of 5%.
      */
     function setKeeperRate(address pool, uint256 newRate) external checkRole(TIMELOCK) {
         require(newRate <= 5, "Max Keeper reward is 5%");
@@ -129,26 +182,33 @@ contract Configurator is Governance {
         emit KeeperRateChanged(pool, newRate);
     }
 
+    /**
+     * @notice Sets the mining permission for the esLBR mining pool.
+     * @param _contracts An array of addresses representing the contracts.
+     * @param _bools An array of booleans indicating whether mining is allowed for each contract.
+     */
     function setEsLBRMiner(address[] calldata _contracts, bool[] calldata _bools) external checkRole(TIMELOCK) {
         for(uint256 i = 0;i<_contracts.length;i++) {
             esLBRMiner[_contracts[i]] = _bools[i];
+            emit esLBRMinerChanges(_contracts[i], _bools[i]);
         }
     }
 
-    function setCrossChainIncentives(address _pool) external checkRole(TIMELOCK) {
-        crossChainIncentives = _pool;
+    /**
+     * dev Sets the maximum percentage share for PeUSD.
+     * @param _ratio The ratio in basis points (1/10_000). The maximum value is 10_000.
+     */
+    function setMaxStableRatio(uint256 _ratio) external checkRole(TIMELOCK) {
+        require(_ratio <= 10_000, "The maximum value is 10000");
+        maxStableRatio = _ratio;
     }
 
-    function setMaxL2Ratio(uint256 _ratio) external checkRole(TIMELOCK) {
-        maxL2Ratio = _ratio;
-    }
-
-    /// @notice Update the fee percentage for WeUSD, only available to the manager of the contract
-	/// @param fee The fee percentage for this token, multiplied by 100 (for example, 10% is 10_00)
-	function setFees(uint256 fee) external checkRole(TIMELOCK) {
+    /// @notice Update the flashloan fee percentage, only available to the manager of the contract
+	/// @param fee The fee percentage for eUSD, multiplied by 100 (for example, 10% is 1000)
+	function setFlashloanFee(uint256 fee) external checkRole(TIMELOCK) {
 		if (fee > 10_000) revert InvalidPercentage();
 		emit FlashloanFeeUpdated(fee);
-        crossChainFlashloanFee = fee;
+        flashloanFee = fee;
 	}
 
     /**
@@ -160,10 +220,18 @@ contract Configurator is Governance {
         emit RedemptionProvider(msg.sender, _bool);
     }
 
+    /**
+     * @dev Updates the mining data for the user's eUSD mining incentives.
+     */
     function refreshMintReward(address user) external {
         eUSDMiningIncentives.refreshReward(user);
     }
 
+
+    /**
+     * @dev Distributes the temporarily held eUSD fees to the esLBR holders.
+     * @dev Requires the eUSD balance in the contract to be greater than 1000.
+     */
     function distributeDividends() external {
         uint256 balance = EUSD.balanceOf(address(this));
         if(balance > 1e21) {
@@ -172,25 +240,46 @@ contract Configurator is Governance {
         }
     }
 
+    /**
+     * @dev Returns the address of the eUSD token.
+     * @return The address of the eUSD token.
+     */
     function getEUSDAddress() external view returns(address) {
         return address(EUSD);
     }
 
+    /**
+     * @dev Returns the address of the Lybra dividend pool.
+     * @return The address of the Lybra dividend pool.
+     */
     function getDividendPool() external view returns(address) {
         return address(lybraDividendPool);
     }
     
+    /**
+     * @dev Returns the safe collateral rate for a asset pool.
+     * @param pool The address of the pool to check.
+     * @return The safe collateral rate for the specified pool.
+     */
     function getSafeCollateralRate(address pool) external view returns(uint256) {
         if(poolSafeCollateralRate[pool] == 0) return 160 * 1e18;
         return poolSafeCollateralRate[pool];
     }
 
+    /**
+     * @dev Checks if a user is a redemption provider.
+     * @param user The address of the user to check.
+     * @return True if the user is a redemption provider, false otherwise.
+     */
     function isRedemptionProvider(address user) external view returns (bool) {
         return redemptionProvider[user];
     }
 
-    function getWeUSDMaxSupplyOnL2() external view returns (uint256) {
-        return EUSD.getSharesByMintedEUSD(EUSD.totalSupply() * maxL2Ratio / 10000);
+    /**
+     * @dev Returns the maximum supply of PeUSD based on the eUSD total supply and the maximum stable ratio.
+     * @return The maximum supply of PeUSD.
+     */
+    function getPeUSDMaxSupply() external view returns (uint256) {
+        return EUSD.totalSupply() * maxStableRatio / 10_000;
     }
-
 }

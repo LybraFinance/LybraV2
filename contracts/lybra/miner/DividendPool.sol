@@ -14,10 +14,19 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/IEUSD.sol";
 import "../interfaces/Iconfigurator.sol";
 import "../interfaces/IesLBR.sol";
+
+interface IesLBRBoost {
+    function getUnlockTime(address user)
+        external
+        view
+        returns (uint256 unlockTime);
+}
+
 contract DividendPool is Ownable {
     Iconfigurator public immutable configurator;
     IesLBR public esLBR;
     IesLBR public LBR;
+    IesLBRBoost public esLBRBoost;
 
     // Sum of (reward rate * dt * 1e18 / total supply)
     uint public rewardPerTokenStored;
@@ -30,13 +39,20 @@ contract DividendPool is Ownable {
     mapping(address => uint) public lastWithdrawTime;
     uint256 immutable exitCycle = 60 days;
 
+    event Restake(address indexed user, uint256 amount, uint256 time);
+    event StakeLBR(address indexed user, uint256 amount, uint256 time);
+    event UnstakeLBR(address indexed user, uint256 amount, uint256 time);
+    event WithdrawLBR(address indexed user, uint256 amount, uint256 time);
+    event ClaimReward(address indexed user, uint256 amount, uint256 time);
+
     constructor(address _config) {
         configurator = Iconfigurator(_config);
     }
 
-    function setTokenAddress(address _eslbr, address _lbr) external onlyOwner {
+    function setTokenAddress(address _eslbr, address _lbr, address _boost) external onlyOwner {
         esLBR = IesLBR(_eslbr);
         LBR = IesLBR(_lbr);
+        esLBRBoost = IesLBRBoost(_boost);
     }
 
     // Total staked
@@ -52,9 +68,14 @@ contract DividendPool is Ownable {
     function stake(uint256 amount) external {
         LBR.burn(msg.sender, amount);
         esLBR.mint(msg.sender, amount);
+        emit StakeLBR(msg.sender, amount, block.timestamp);
     }
 
     function unstake(uint256 amount) external {
+        require(
+            block.timestamp >= esLBRBoost.getUnlockTime(msg.sender),
+            "Your lock-in period has not ended. You can't convert your esLBR now."
+        );
         esLBR.burn(msg.sender, amount);
         withdraw(msg.sender);
         uint256 total = amount;
@@ -63,6 +84,7 @@ contract DividendPool is Ownable {
         }
         unstakeRate[msg.sender] = total / exitCycle;
         time2fullRedemption[msg.sender] = block.timestamp + exitCycle;
+        emit UnstakeLBR(msg.sender, amount, block.timestamp);
     }
 
     function withdraw(address user) public {
@@ -71,12 +93,15 @@ contract DividendPool is Ownable {
             LBR.mint(user, amount);
         }
         lastWithdrawTime[user] = block.timestamp;
+        emit WithdrawLBR(user, amount, block.timestamp);
     }
 
     function reStake() external {
-        esLBR.mint(msg.sender, getReservedLBRForVesting(msg.sender) + getClaimAbleLBR(msg.sender));
+        uint256 amount = getReservedLBRForVesting(msg.sender) + getClaimAbleLBR(msg.sender);
+        esLBR.mint(msg.sender, amount);
         unstakeRate[msg.sender] = 0;
         time2fullRedemption[msg.sender] = 0;
+        emit Restake(msg.sender, amount, block.timestamp);
     }
 
     function getClaimAbleLBR(address user) public view returns (uint256 amount) {
@@ -117,7 +142,9 @@ contract DividendPool is Ownable {
         uint reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
-            IEUSD(configurator.getEUSDAddress()).transferShares(msg.sender, reward);
+            IEUSD EUSD = IEUSD(configurator.getEUSDAddress());
+            EUSD.transferShares(msg.sender, reward);
+            emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(reward), block.timestamp);
         }
     }
 
