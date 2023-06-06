@@ -9,8 +9,6 @@ import "../interfaces/Iconfigurator.sol";
 /**
  * @title Interest-bearing ERC20-like token for Lybra protocol.
  *
- * This contract is abstract. 
- *
  * EUSD balances are dynamic and represent the holder's share in the total amount
  * of Ether controlled by the protocol. Account shares aren't normalized, so the
  * contract also stores the sum of all shares to calculate each account's token balance
@@ -450,7 +448,7 @@ contract EUSD is IERC20, Context {
 
     /**
      * @notice Creates `_sharesAmount` shares and assigns them to `_recipient`, increasing the total amount of shares.
-     * @dev This doesn't increase the token total supply.
+     * @dev This operation also increases the total supply of tokens.
      *
      * Requirements:
      *
@@ -482,7 +480,7 @@ contract EUSD is IERC20, Context {
 
     /**
      * @notice Destroys `sharesAmount` shares from `_account`'s holdings, decreasing the total amount of shares.
-     * @dev This doesn't decrease the token total supply.
+     * @dev This operation also decrease the total supply of tokens.
      *
      * Requirements:
      *

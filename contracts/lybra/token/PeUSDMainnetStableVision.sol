@@ -68,13 +68,13 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
     /**
      * @dev Allows users to deposit eUSD and mint PeUSD tokens, which can be directly bridged to other networks.
      * @param eusdAmount The amount of eUSD to deposit and mint PeUSD tokens.
-     * @param _dstChainId The chain ID of the target network.
-     * @param _toAddress The receiving address after cross-chain transfer.
-     * @param _callParams Additional parameters.
+     * @param dstChainId The chain ID of the target network.
+     * @param toAddress The receiving address after cross-chain transfer.
+     * @param callParams Additional parameters.
      */
-    function convertToPeUSDAndCrossChain(uint256 eusdAmount, uint16 _dstChainId, bytes32 _toAddress, LzCallParams calldata _callParams) external payable {
+    function convertToPeUSDAndCrossChain(uint256 eusdAmount, uint16 dstChainId, bytes32 toAddress, LzCallParams calldata callParams) external payable {
         convertToPeUSD(_msgSender(), eusdAmount);
-        sendFrom(_msgSender(), _dstChainId, _toAddress, eusdAmount, _callParams);
+        sendFrom(_msgSender(), dstChainId, toAddress, eusdAmount, callParams);
     }
 
     /**

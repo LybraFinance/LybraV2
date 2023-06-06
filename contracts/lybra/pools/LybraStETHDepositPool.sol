@@ -158,11 +158,11 @@ contract LybraStETHDepositPool is LybraRebaseAssetPoolBase {
             assetAmount * 2 <= depositedAsset[onBehalfOf],
             "a max of 50% collateral can be liquidated"
         );
-        uint256 eusdAmount = (assetAmount * etherPrice) / 1e18;
         require(
-            EUSD.allowance(provider, address(this)) >= eusdAmount,
+            EUSD.allowance(provider, address(this)) > 0,
             "provider should authorize to provide liquidation EUSD"
         );
+        uint256 eusdAmount = (assetAmount * etherPrice) / 1e18;
 
         _repay(provider, onBehalfOf, eusdAmount);
         uint256 reducedEther = (assetAmount * 11) / 10;

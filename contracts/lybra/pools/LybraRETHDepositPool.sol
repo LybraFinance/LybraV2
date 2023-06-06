@@ -89,11 +89,11 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
             assetAmount * 2 <= depositedAsset[onBehalfOf],
             "a max of 50% collateral can be liquidated"
         );
-        uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
         require(
-            EUSD.allowance(provider, address(this)) >= eusdAmount,
+            EUSD.allowance(provider, address(this)) > 0,
             "provider should authorize to provide liquidation EUSD"
         );
+        uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, eusdAmount);
         uint256 reducedAsset = (assetAmount * 11) / 10;
@@ -226,6 +226,14 @@ contract LybraRETHDepositPool is LybraNonRebaseAssetPoolBase {
         );
     }
 
+    
+    /**
+     * @dev Internal function to mint eUSD tokens in a non-rebasing asset pool. The user's borrowed amount is recorded in shares.
+     * @param _provider The address of the provider.
+     * @param _onBehalfOf The address of the recipient.
+     * @param _mintAmount The amount of eUSD to mint.
+     * @param _assetPrice The current asset price.
+     */
     function _mintEUSD(
         address _provider,
         address _onBehalfOf,

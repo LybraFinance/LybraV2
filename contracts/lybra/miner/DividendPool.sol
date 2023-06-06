@@ -37,8 +37,9 @@ contract DividendPool is Ownable {
     mapping(address => uint) public time2fullRedemption;
     mapping(address => uint) public unstakeRate;
     mapping(address => uint) public lastWithdrawTime;
-    uint256 immutable exitCycle = 60 days;
-
+    uint256 immutable exitCycle = 90 days;
+    uint256 public grabableAmount;
+    uint256 public grabFeeRatio = 3000;
     event Restake(address indexed user, uint256 amount, uint256 time);
     event StakeLBR(address indexed user, uint256 amount, uint256 time);
     event UnstakeLBR(address indexed user, uint256 amount, uint256 time);
@@ -53,6 +54,11 @@ contract DividendPool is Ownable {
         esLBR = IesLBR(_eslbr);
         LBR = IesLBR(_lbr);
         esLBRBoost = IesLBRBoost(_boost);
+    }
+
+    function setGrabCost(uint256 _ratio) external onlyOwner {
+        require(_ratio <= 8000, "BCE");
+        grabFeeRatio = _ratio;
     }
 
     // Total staked
@@ -71,6 +77,14 @@ contract DividendPool is Ownable {
         emit StakeLBR(msg.sender, amount, block.timestamp);
     }
 
+    /**
+     * @dev Unlocks esLBR and converts it to LBR.
+     * @param amount The amount to convert.
+     * Requirements:
+     * The current time must be greater than the unlock time retrieved from the boost contract for the user.
+     * Effects:
+     * Resets the user's vesting data, entering a new vesting period, when converting to LBR.
+     */
     function unstake(uint256 amount) external {
         require(
             block.timestamp >= esLBRBoost.getUnlockTime(msg.sender),
@@ -96,12 +110,50 @@ contract DividendPool is Ownable {
         emit WithdrawLBR(user, amount, block.timestamp);
     }
 
+    /**
+     * @dev Redeems and converts the ESLBR being claimed in advance, 
+     * with the lost portion being recorded in the contract and available for others to purchase in LBR at a certain ratio.
+     */
+    function unlockPrematurely() external {
+        require(block.timestamp + exitCycle - 3 days > time2fullRedemption[msg.sender], "");
+        uint256 burnAmount = getReservedLBRForVesting(msg.sender) - getPreUnlockableAmount(msg.sender);
+        uint256 amount = getPreUnlockableAmount(msg.sender) + getClaimAbleLBR(msg.sender);
+        if(amount > 0) {
+            LBR.mint(msg.sender, amount);
+        }
+        unstakeRate[msg.sender] = 0;
+        time2fullRedemption[msg.sender] = 0;
+        grabableAmount += burnAmount;
+    }
+
+    /**
+     * @dev Purchase the accumulated amount of pre-claimed lost ESLBR in the contract using LBR.
+     * @param amount The amount of ESLBR to be purchased.
+     * Requirements:
+     * The amount must be greater than 0.
+     */
+    function grabEsLBR(uint256 amount) external {
+        require(amount > 0, "QMG");
+        grabableAmount -= amount;
+        LBR.burn(msg.sender, amount * grabFeeRatio / 10000);
+        esLBR.mint(msg.sender, amount);
+    } 
+
+    /**
+     * @dev Convert unredeemed and converting ESLBR tokens back to LBR.
+     */
     function reStake() external {
         uint256 amount = getReservedLBRForVesting(msg.sender) + getClaimAbleLBR(msg.sender);
         esLBR.mint(msg.sender, amount);
         unstakeRate[msg.sender] = 0;
         time2fullRedemption[msg.sender] = 0;
         emit Restake(msg.sender, amount, block.timestamp);
+    }
+
+    function getPreUnlockableAmount(address user) public view returns (uint256 amount) {
+        uint256 a = getReservedLBRForVesting(user);
+        if(a == 0) return 0;
+        amount = a * (75e18 - (time2fullRedemption[user] - block.timestamp)  * 70e18 / (exitCycle / 1 days - 3) / 1 days ) / 100e18;
     }
 
     function getClaimAbleLBR(address user) public view returns (uint256 amount) {

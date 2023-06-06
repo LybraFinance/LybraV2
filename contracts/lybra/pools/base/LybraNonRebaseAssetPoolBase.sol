@@ -203,7 +203,6 @@ contract LybraNonRebaseAssetPoolBase {
         feeStored[user] += _newFee(user);
         feeUpdatedAt[user] = block.timestamp;
     }
-
     
 
     function _newFee(address user) internal view returns (uint256) {
@@ -215,6 +214,12 @@ contract LybraNonRebaseAssetPoolBase {
             10000;
     }
 
+
+    /**
+     * @dev Returns the current borrowing amount for the user, including borrowed shares and accumulated fees.
+     * @param user The address of the user.
+     * @return The total borrowing amount for the user.
+     */
     function getBorrowedOf(address user) public view returns (uint256) {
         return borrowedShares[user] + feeStored[user] + _newFee(user);
     }
