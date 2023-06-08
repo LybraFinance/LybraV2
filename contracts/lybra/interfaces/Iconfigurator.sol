@@ -8,10 +8,10 @@ interface Iconfigurator {
     function vaultMintPaused(address pool) external view returns(bool);
     function vaultBurnPaused(address pool) external view returns(bool);
     function tokenMiner(address pool) external view returns(bool);
-    function getSafeCollateralRate(address pool) external view returns(uint256);
-    function getBadCollateralRate(address pool) external view returns(uint256);
+    function getSafeCollateralRatio(address pool) external view returns(uint256);
+    function getBadCollateralRatio(address pool) external view returns(uint256);
     function vaultMintFeeApy(address pool) external view returns(uint256);
-    function vaultKeeperRate(address pool) external view returns(uint256);
+    function vaultKeeperRatio(address pool) external view returns(uint256);
     function redemptionFee() external view returns(uint256);
     function getEUSDAddress() external view returns(address);
     function eUSDMiningIncentives() external view returns(address);

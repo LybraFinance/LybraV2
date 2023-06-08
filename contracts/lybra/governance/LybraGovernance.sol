@@ -115,10 +115,6 @@ contract LybraGovernance is GovernorTimelockControl {
         return esLBR.getPastVotes(account, timepoint);
     }
 
-    function _executor() internal view override returns (address) {
-        return timelock();
-    }
-
     /**
      * @notice module:user-config
      * @dev Delay between the vote start and vote end. The unit this duration is expressed in depends on the clock

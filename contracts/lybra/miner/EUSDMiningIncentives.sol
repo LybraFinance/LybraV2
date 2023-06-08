@@ -39,15 +39,16 @@ contract EUSDMiningIncentives is Ownable {
     // Minimum of last updated time and reward finish time
     uint256 public updatedAt;
     // Reward to be paid out per second
-    uint256 public rewardRate;
-    // Sum of (reward rate * dt * 1e18 / total supply)
+    uint256 public rewardRatio;
+    // Sum of (reward ratio * dt * 1e18 / total supply)
     uint256 public rewardPerTokenStored;
     // User address => rewardPerTokenStored
     mapping(address => uint256) public userRewardPerTokenPaid;
     // User address => rewards to be claimed
     mapping(address => uint256) public rewards;
     mapping(address => uint256) public userUpdatedAt;
-    uint256 public extraRate = 50 * 1e18;
+    uint256 public extraRatio = 50 * 1e18;
+    uint256 public peUSDExtraRatio = 10 * 1e18;
     uint256 public biddingFeeRatio = 3000;
     address public ethlbrStakePool;
     address public ethlbrLpToken;
@@ -93,7 +94,7 @@ contract EUSDMiningIncentives is Ownable {
 
     function setPools(address[] memory _pools) external onlyOwner {
         for (uint i = 0; i < _pools.length; i++) {
-            require(configurator.mintVault(_pools[i]), "");
+            require(configurator.mintVault(_pools[i]), "NOT_VAULT");
         }
         pools = _pools;
     }
@@ -103,8 +104,14 @@ contract EUSDMiningIncentives is Ownable {
         biddingFeeRatio = _biddingRatio;
     }
 
-    function setExtraRate(uint256 rate) external onlyOwner {
-        extraRate = rate;
+    function setExtraRatio(uint256 ratio) external onlyOwner {
+        require(ratio <= 1e20, "BCE");
+        extraRatio = ratio;
+    }
+
+    function setPeUSDExtraRatio(uint256 ratio) external onlyOwner {
+        require(ratio <= 1e20, "BCE");
+        peUSDExtraRatio = ratio;
     }
 
     function setBoost(address _boost) external onlyOwner {
@@ -130,8 +137,8 @@ contract EUSDMiningIncentives is Ownable {
         for (uint i = 0; i < pools.length; i++) {
             ILybra pool = ILybra(pools[i]);
             uint borrowed = pool.getBorrowedOf(user);
-            if (pool.getBorrowType() == 1) {
-                borrowed = EUSD.getMintedEUSDByShares(borrowed);
+            if (pool.getVaultType() == 1) {
+                borrowed = borrowed * (1e20 + peUSDExtraRatio) / 1e20;
             }
             amount += borrowed;
         }
@@ -164,7 +171,7 @@ contract EUSDMiningIncentives is Ownable {
 
         return
             rewardPerTokenStored +
-            (rewardRate * (lastTimeRewardApplicable() - updatedAt) * 1e18) /
+            (rewardRatio * (lastTimeRewardApplicable() - updatedAt) * 1e18) /
             totalStaked();
     }
 
@@ -176,7 +183,7 @@ contract EUSDMiningIncentives is Ownable {
     function getBoost(address _account) public view returns (uint256) {
         uint256 redemptionBoost;
         if (configurator.isRedemptionProvider(_account)) {
-            redemptionBoost = extraRate;
+            redemptionBoost = extraRatio;
         }
         return
             100 *
@@ -241,14 +248,14 @@ contract EUSDMiningIncentives is Ownable {
     ) external onlyOwner updateReward(address(0)) {
         require(amount > 0, "amount = 0");
         if (block.timestamp >= finishAt) {
-            rewardRate = amount / duration;
+            rewardRatio = amount / duration;
         } else {
             uint256 remainingRewards = (finishAt - block.timestamp) *
-                rewardRate;
-            rewardRate = (amount + remainingRewards) / duration;
+                rewardRatio;
+            rewardRatio = (amount + remainingRewards) / duration;
         }
 
-        require(rewardRate > 0, "reward rate = 0");
+        require(rewardRatio > 0, "reward ratio = 0");
 
         finishAt = block.timestamp + duration;
         updatedAt = block.timestamp;

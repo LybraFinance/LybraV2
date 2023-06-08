@@ -14,7 +14,7 @@ abstract contract LybraEUSDVaultBase {
     IEUSD public immutable EUSD;
     IERC20 public immutable collateralAsset;
     Iconfigurator public immutable configurator;
-    uint256 public immutable badCollateralRate = 150 * 1e18;
+    uint256 public immutable badCollateralRatio = 150 * 1e18;
 
     uint256 public totalDepositedAsset;
     uint256 public lastReportTime;
@@ -153,7 +153,7 @@ abstract contract LybraEUSDVaultBase {
      * - `onBehalfOf` cannot be the zero address.
      * - `amount` Must be higher than 0.
      *
-     * @dev Withdraw stETH. Check user’s collateral rate after withdrawal, should be higher than `safeCollateralRate`
+     * @dev Withdraw stETH. Check user’s collateral ratio after withdrawal, should be higher than `safeCollateralRatio`
      */
     function withdraw(address onBehalfOf, uint256 amount) external virtual {
         require(onBehalfOf != address(0), "TZA");
@@ -217,13 +217,13 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @notice When overallCollateralRate is above 150%, Keeper liquidates borrowers whose collateral rate is below badCollateralRate, using EUSD provided by Liquidation Provider.
+     * @notice When overallCollateralRatio is above 150%, Keeper liquidates borrowers whose collateral ratio is below badCollateralRatio, using EUSD provided by Liquidation Provider.
      *
      * Requirements:
-     * - onBehalfOf Collateral Rate should be below badCollateralRate
+     * - onBehalfOf Collateral Ratio should be below badCollateralRatio
      * - collateralAmount should be less than 50% of collateral
      * - provider should authorize Lybra to utilize EUSD
-     * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, collateral is reduced by the collateralAmount corresponding to 110% of the value. Keeper gets keeperRate / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
+     * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, collateral is reduced by the collateralAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
      */
     function liquidation(
         address provider,
@@ -231,12 +231,12 @@ abstract contract LybraEUSDVaultBase {
         uint256 assetAmount
     ) external virtual {
         uint256 assetPrice = getAssetPrice();
-        uint256 onBehalfOfCollateralRate = (depositedAsset[onBehalfOf] *
+        uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] *
             assetPrice *
             100) / borrowed[onBehalfOf];
         require(
-            onBehalfOfCollateralRate < badCollateralRate,
-            "Borrowers collateral rate should below badCollateralRate"
+            onBehalfOfCollateralRatio < badCollateralRatio,
+            "Borrowers collateral ratio should below badCollateralRatio"
         );
 
         require(
@@ -258,7 +258,7 @@ abstract contract LybraEUSDVaultBase {
             collateralAsset.transfer(msg.sender, reducedAsset);
         } else {
             reward2keeper =
-                (reducedAsset * configurator.vaultKeeperRate(address(this))) /
+                (reducedAsset * configurator.vaultKeeperRatio(address(this))) /
                 110;
             collateralAsset.transfer(provider, reducedAsset - reward2keeper);
             collateralAsset.transfer(msg.sender, reward2keeper);
@@ -276,13 +276,13 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @notice When overallCollateralRate is below badCollateralRate, borrowers with collateralRate below 125% could be fully liquidated.
+     * @notice When overallCollateralRatio is below badCollateralRatio, borrowers with collateralRatio below 125% could be fully liquidated.
      * Emits a `LiquidationRecord` event.
      *
      * Requirements:
-     * - Current overallCollateralRate should be below badCollateralRate
-     * - `onBehalfOf`collateralRate should be below 125%
-     * @dev After Liquidation, borrower's debt is reduced by collateralAmount * etherPrice, deposit is reduced by collateralAmount * borrower's collateralRate. Keeper gets a liquidation reward of `keeperRate / borrower's collateralRate
+     * - Current overallCollateralRatio should be below badCollateralRatio
+     * - `onBehalfOf`collateralRatio should be below 125%
+     * @dev After Liquidation, borrower's debt is reduced by collateralAmount * etherPrice, deposit is reduced by collateralAmount * borrower's collateralRatio. Keeper gets a liquidation reward of `keeperRatio / borrower's collateralRatio
      */
     function superLiquidation(
         address provider,
@@ -293,23 +293,23 @@ abstract contract LybraEUSDVaultBase {
         require(
             (totalDepositedAsset * assetPrice * 100) /
                 poolTotalEUSDCirculation <
-                badCollateralRate,
-            "overallCollateralRate should below 150%"
+                badCollateralRatio,
+            "overallCollateralRatio should below 150%"
         );
-        uint256 onBehalfOfCollateralRate = (depositedAsset[onBehalfOf] *
+        uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] *
             assetPrice *
             100) / borrowed[onBehalfOf];
         require(
-            onBehalfOfCollateralRate < 125 * 1e18,
-            "borrowers collateralRate should below 125%"
+            onBehalfOfCollateralRatio < 125 * 1e18,
+            "borrowers collateralRatio should below 125%"
         );
         require(
             assetAmount <= depositedAsset[onBehalfOf],
             "total of collateral can be liquidated at most"
         );
         uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
-        if (onBehalfOfCollateralRate >= 1e20) {
-            eusdAmount = (eusdAmount * 1e20) / onBehalfOfCollateralRate;
+        if (onBehalfOfCollateralRatio >= 1e20) {
+            eusdAmount = (eusdAmount * 1e20) / onBehalfOfCollateralRatio;
         }
         require(
             EUSD.allowance(provider, address(this)) >= eusdAmount,
@@ -323,13 +323,13 @@ abstract contract LybraEUSDVaultBase {
         uint256 reward2keeper;
         if (
             msg.sender != provider &&
-            onBehalfOfCollateralRate >=
-            1e20 + configurator.vaultKeeperRate(address(this)) * 1e18
+            onBehalfOfCollateralRatio >=
+            1e20 + configurator.vaultKeeperRatio(address(this)) * 1e18
         ) {
             reward2keeper =
-                ((assetAmount * configurator.vaultKeeperRate(address(this))) *
+                ((assetAmount * configurator.vaultKeeperRatio(address(this))) *
                     1e18) /
-                onBehalfOfCollateralRate;
+                onBehalfOfCollateralRatio;
             collateralAsset.transfer(msg.sender, reward2keeper);
         }
         collateralAsset.transfer(provider, assetAmount - reward2keeper);
@@ -378,12 +378,12 @@ abstract contract LybraEUSDVaultBase {
             "eusdAmount cannot surpass providers debt"
         );
         uint256 assetPrice = getAssetPrice();
-        uint256 providerCollateralRate = (depositedAsset[provider] *
+        uint256 providerCollateralRatio = (depositedAsset[provider] *
             assetPrice *
             100) / borrowed[provider];
         require(
-            providerCollateralRate >= 100 * 1e18,
-            "provider's collateral rate should more than 100%"
+            providerCollateralRatio >= 100 * 1e18,
+            "provider's collateral ratio should more than 100%"
         );
         _repay(msg.sender, provider, eusdAmount);
         uint256 collateralAmount = (((eusdAmount * 1e18) / assetPrice) *
@@ -401,7 +401,7 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @dev Refresh LBR reward before adding providers debt. Refresh Lybra generated service fee before adding totalSupply. Check providers collateralRate cannot below `safeCollateralRate`after minting.
+     * @dev Refresh LBR reward before adding providers debt. Refresh Lybra generated service fee before adding totalSupply. Check providers collateralRatio cannot below `safeCollateralRatio`after minting.
      */
     function _mintEUSD(
         address _provider,
@@ -434,13 +434,13 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @dev Get USD value of current collateral asset and minted EUSD through price oracle / Collateral asset USD value must higher than safe Collateral Rate.
+     * @dev Get USD value of current collateral asset and minted EUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
      */
     function _checkHealth(address _user, uint256 _assetPrice) internal view {
         if (
             ((depositedAsset[_user] * _assetPrice * 100) / borrowed[_user]) <
-            configurator.getSafeCollateralRate(address(this))
-        ) revert("collateralRate is Below safeCollateralRate");
+            configurator.getSafeCollateralRatio(address(this))
+        ) revert("collateralRatio is Below safeCollateralRatio");
     }
 
     function _saveReport() internal {
@@ -469,7 +469,7 @@ abstract contract LybraEUSDVaultBase {
         return address(collateralAsset);
     }
 
-    function getvaultType() external pure returns (uint8) {
+    function getVaultType() external pure returns (uint8) {
         return vaultType;
     }
 

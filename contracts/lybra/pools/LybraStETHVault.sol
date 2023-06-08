@@ -22,7 +22,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
     ) LybraEUSDVaultBase(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84, _config) {}
 
     function depositEtherToMint(uint256 mintAmount) external payable override {
-        require(msg.value >= 1 ether, "Deposit should not be less than 1 ETH.");
+        require(msg.value >= 1 ether, "DNL");
 
         //convert to steth
         uint256 sharesAmount = Ilido(address(collateralAsset)).submit{

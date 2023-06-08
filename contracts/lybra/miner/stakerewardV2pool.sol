@@ -26,8 +26,8 @@ contract StakingRewardsV2 is Ownable {
     // Minimum of last updated time and reward finish time
     uint256 public updatedAt;
     // Reward to be paid out per second
-    uint256 public rewardRate;
-    // Sum of (reward rate * dt * 1e18 / total supply)
+    uint256 public rewardRatio;
+    // Sum of (reward ratio * dt * 1e18 / total supply)
     uint256 public rewardPerTokenStored;
     // User address => rewardPerTokenStored
     mapping(address => uint256) public userRewardPerTokenPaid;
@@ -78,7 +78,7 @@ contract StakingRewardsV2 is Ownable {
 
         return
             rewardPerTokenStored +
-            (rewardRate * (lastTimeRewardApplicable() - updatedAt) * 1e18) /
+            (rewardRatio * (lastTimeRewardApplicable() - updatedAt) * 1e18) /
             totalSupply;
     }
 
@@ -151,14 +151,14 @@ contract StakingRewardsV2 is Ownable {
         uint256 _amount
     ) external onlyOwner updateReward(address(0)) {
         if (block.timestamp >= finishAt) {
-            rewardRate = _amount / duration;
+            rewardRatio = _amount / duration;
         } else {
             uint256 remainingRewards = (finishAt - block.timestamp) *
-                rewardRate;
-            rewardRate = (_amount + remainingRewards) / duration;
+                rewardRatio;
+            rewardRatio = (_amount + remainingRewards) / duration;
         }
 
-        require(rewardRate > 0, "reward rate = 0");
+        require(rewardRatio > 0, "reward ratio = 0");
 
         finishAt = block.timestamp + duration;
         updatedAt = block.timestamp;

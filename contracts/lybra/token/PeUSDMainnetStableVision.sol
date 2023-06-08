@@ -29,7 +29,7 @@ interface FlashBorrower {
 contract PeUSDMainnet is BaseOFTV2, ERC20 {
     IEUSD public immutable EUSD;
     Iconfigurator public immutable configurator;
-    uint internal immutable ld2sdRate;
+    uint internal immutable ld2sdRatio;
     mapping(address => ConvertInfo) public userConvertInfo;
 
     struct ConvertInfo {
@@ -68,7 +68,7 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
             _sharedDecimals <= decimals,
             "OFT: sharedDecimals must be <= decimals"
         );
-        ld2sdRate = 10 ** (decimals - _sharedDecimals);
+        ld2sdRatio = 10 ** (decimals - _sharedDecimals);
     }
 
     function mint(
@@ -243,7 +243,7 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
         return _amount;
     }
 
-    function _ld2sdRate() internal view virtual override returns (uint) {
-        return ld2sdRate;
+    function _ld2sdRatio() internal view virtual override returns (uint) {
+        return ld2sdRatio;
     }
 }

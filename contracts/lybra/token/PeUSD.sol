@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../../OFT/BaseOFTV2.sol";
 
 contract WeUSD is BaseOFTV2, ERC20 {
-    uint internal immutable ld2sdRate;
+    uint internal immutable ld2sdRatio;
 
     constructor(
         uint8 _sharedDecimals,
@@ -17,7 +17,7 @@ contract WeUSD is BaseOFTV2, ERC20 {
             _sharedDecimals <= decimals,
             "OFT: sharedDecimals must be <= decimals"
         );
-        ld2sdRate = 10 ** (decimals - _sharedDecimals);
+        ld2sdRatio = 10 ** (decimals - _sharedDecimals);
     }
 
     /************************************************************************
@@ -68,7 +68,7 @@ contract WeUSD is BaseOFTV2, ERC20 {
         return _amount;
     }
 
-    function _ld2sdRate() internal view virtual override returns (uint) {
-        return ld2sdRate;
+    function _ld2sdRatio() internal view virtual override returns (uint) {
+        return ld2sdRatio;
     }
 }

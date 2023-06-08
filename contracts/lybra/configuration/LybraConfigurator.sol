@@ -25,19 +25,22 @@ interface IeUSDMiningIncentives {
     function refreshReward(address user) external;
 }
 
+interface IVault {
+    function vaultType() external view returns (uint8);
+}
+
 contract Configurator {
     mapping(address => bool) public mintVault;
     mapping(address => uint256) public mintVaultMaxSupply;
     mapping(address => bool) public vaultMintPaused;
     mapping(address => bool) public vaultBurnPaused;
-    mapping(address => uint256) vaultSafeCollateralRate;
+    mapping(address => uint256) vaultSafeCollateralRatio;
+    mapping(address => uint256) vaultBadCollateralRatio;
     mapping(address => uint256) public vaultMintFeeApy;
-    mapping(address => uint256) public vaultKeeperRate;
+    mapping(address => uint256) public vaultKeeperRatio;
     mapping(address => bool) redemptionProvider;
     mapping(address => bool) public tokenMiner;
 
-    // uint256 public safeCollateralRate = 160 * 1e18;
-    uint256 public immutable badCollateralRate = 150 * 1e18;
     uint256 public redemptionFee = 50;
     IGovernanceTimelock public GovernanceTimelock;
 
@@ -49,12 +52,12 @@ contract Configurator {
     uint256 maxStableRatio = 5_000;
 
     event RedemptionFeeChanged(uint256 newSlippage);
-    event SafeCollateralRateChanged(address indexed pool, uint256 newRatio);
+    event SafeCollateralRatioChanged(address indexed pool, uint256 newRatio);
     event RedemptionProvider(address indexed user, bool status);
     event DividendPoolChanged(address indexed pool, uint256 timestamp);
     event EUSDMiningIncentivesChanged(address indexed pool, uint256 timestamp);
     event BorrowApyChanged(address indexed pool, uint256 newApy);
-    event KeeperRateChanged(address indexed pool, uint256 newSlippage);
+    event KeeperRatioChanged(address indexed pool, uint256 newSlippage);
     event tokenMinerChanges(address indexed pool, bool status);
 
     /// @notice Emitted when the fees for flash loaning a token have been updated
@@ -110,6 +113,21 @@ contract Configurator {
         uint256 maxSupply
     ) external onlyRole(DAO) {
         mintVaultMaxSupply[pool] = maxSupply;
+    }
+
+    /**
+     * @notice  badCollateralRatio can be decided by DAO,starts at 120%
+     */
+    function setBadCollateralRatio(
+        address pool,
+        uint256 newRatio
+    ) external onlyRole(DAO) {
+        require(
+            newRatio >= 120 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] + 1e19,
+            "Safe CollateralRatio should more than 160%"
+        );
+        vaultBadCollateralRatio[pool] = newRatio;
+        emit SafeCollateralRatioChanged(pool, newRatio);
     }
 
     /**
@@ -172,18 +190,28 @@ contract Configurator {
     }
 
     /**
-     * @notice  safeCollateralRate can be decided by TIMELOCK,starts at 160%
+     * @notice  safeCollateralRatio can be decided by TIMELOCK.
+     * The eUSD vault requires a minimum safe collateral rate of 160%,
+     * On the other hand, the PeUSD vault requires a safe collateral rate at least 10% higher
+     * than the liquidation collateral rate, providing an additional buffer to protect against liquidation risks.
      */
-    function setSafeCollateralRate(
+    function setSafeCollateralRatio(
         address pool,
         uint256 newRatio
     ) external checkRole(TIMELOCK) {
-        require(
-            newRatio >= 160 * 1e18,
-            "Safe CollateralRate should more than 160%"
-        );
-        vaultSafeCollateralRate[pool] = newRatio;
-        emit SafeCollateralRateChanged(pool, newRatio);
+        if(IVault(pool).vaultType() == 0) {
+            require(
+                newRatio >= 160 * 1e18,
+                "eUSD vault safe collateralRatio should more than 160%"
+            );
+        } else {
+            require(
+                newRatio >= vaultBadCollateralRatio[pool] + 1e19,
+                "PeUSD vault safe collateralRatio should more than bad collateralRatio"
+            );
+        }
+        vaultSafeCollateralRatio[pool] = newRatio;
+        emit SafeCollateralRatioChanged(pool, newRatio);
     }
 
     /**
@@ -201,17 +229,17 @@ contract Configurator {
     }
 
     /**
-     * @notice Set the reward rate for the liquidator after liquidation.
-     * @param pool The address of the pool to set the reward rate for.
-     * @param newRate The new reward rate to set, limited to a maximum of 5%.
+     * @notice Set the reward ratio for the liquidator after liquidation.
+     * @param pool The address of the pool to set the reward ratio for.
+     * @param newRatio The new reward ratio to set, limited to a maximum of 5%.
      */
-    function setKeeperRate(
+    function setKeeperRatio(
         address pool,
-        uint256 newRate
+        uint256 newRatio
     ) external checkRole(TIMELOCK) {
-        require(newRate <= 5, "Max Keeper reward is 5%");
-        vaultKeeperRate[pool] = newRate;
-        emit KeeperRateChanged(pool, newRate);
+        require(newRatio <= 5, "Max Keeper reward is 5%");
+        vaultKeeperRatio[pool] = newRatio;
+        emit KeeperRatioChanged(pool, newRatio);
     }
 
     /**
@@ -291,15 +319,20 @@ contract Configurator {
     }
 
     /**
-     * @dev Returns the safe collateral rate for a asset pool.
+     * @dev Returns the safe collateral ratio for a asset pool.
      * @param pool The address of the pool to check.
-     * @return The safe collateral rate for the specified pool.
+     * @return The safe collateral ratio for the specified pool.
      */
-    function getSafeCollateralRate(
+    function getSafeCollateralRatio(
         address pool
     ) external view returns (uint256) {
-        if (vaultSafeCollateralRate[pool] == 0) return 160 * 1e18;
-        return vaultSafeCollateralRate[pool];
+        if (vaultSafeCollateralRatio[pool] == 0) return 160 * 1e18;
+        return vaultSafeCollateralRatio[pool];
+    }
+
+    function getBadCollateralRatio(address pool) external view returns(uint256) {
+        if(vaultBadCollateralRatio[pool] == 0) return vaultSafeCollateralRatio[pool] + 1e19;
+        return vaultBadCollateralRatio[pool];
     }
 
     /**

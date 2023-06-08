@@ -137,7 +137,7 @@ abstract contract LybraPeUSDVaultBase {
      * - `onBehalfOf` cannot be the zero address.
      * - `amount` Must be higher than 0.
      *
-     * @dev Withdraw stETH. Check user’s collateral rate after withdrawal, should be higher than `safeCollateralRate`
+     * @dev Withdraw stETH. Check user’s collateral ratio after withdrawal, should be higher than `safeCollateralRatio`
      */
     function withdraw(address onBehalfOf, uint256 amount) external virtual {
         require(onBehalfOf != address(0), "TZA");
@@ -198,13 +198,13 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @notice When overallCollateralRate is above 150%, Keeper liquidates borrowers whose collateral rate is below badCollateralRate, using PeUSD provided by Liquidation Provider.
+     * @notice When overallCollateralRatio is above 150%, Keeper liquidates borrowers whose collateral ratio is below badCollateralRatio, using PeUSD provided by Liquidation Provider.
      *
      * Requirements:
-     * - onBehalfOf Collateral Rate should be below badCollateralRate
+     * - onBehalfOf Collateral Ratio should be below badCollateralRatio
      * - assetAmount should be less than 50% of collateral
      * - provider should authorize Lybra to utilize PeUSD
-     * @dev After liquidation, borrower's debt is reduced by assetAmount * assetPrice, collateral is reduced by the assetAmount corresponding to 110% of the value. Keeper gets keeperRate / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
+     * @dev After liquidation, borrower's debt is reduced by assetAmount * assetPrice, collateral is reduced by the assetAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
      */
     function liquidation(
         address provider,
@@ -212,13 +212,13 @@ abstract contract LybraPeUSDVaultBase {
         uint256 assetAmount
     ) external virtual {
         uint256 assetPrice = getAssetPrice();
-        uint256 onBehalfOfCollateralRate = (depositedAsset[onBehalfOf] *
+        uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] *
             assetPrice *
             100) / getBorrowedOf(onBehalfOf);
         require(
-            onBehalfOfCollateralRate <
-                configurator.getBadCollateralRate(address(this)),
-            "Borrowers collateral rate should below badCollateralRate"
+            onBehalfOfCollateralRatio <
+                configurator.getBadCollateralRatio(address(this)),
+            "Borrowers collateral ratio should below badCollateralRatio"
         );
 
         require(
@@ -239,7 +239,7 @@ abstract contract LybraPeUSDVaultBase {
             collateralAsset.transfer(msg.sender, reducedAsset);
         } else {
             reward2keeper =
-                (reducedAsset * configurator.vaultKeeperRate(address(this))) /
+                (reducedAsset * configurator.vaultKeeperRatio(address(this))) /
                 110;
             collateralAsset.transfer(provider, reducedAsset - reward2keeper);
             collateralAsset.transfer(msg.sender, reward2keeper);
@@ -278,12 +278,12 @@ abstract contract LybraPeUSDVaultBase {
             "peusdAmount cannot surpass providers debt"
         );
         uint256 assetPrice = getAssetPrice();
-        uint256 providerCollateralRate = (depositedAsset[provider] *
+        uint256 providerCollateralRatio = (depositedAsset[provider] *
             assetPrice *
             100) / borrowed[provider];
         require(
-            providerCollateralRate >= 100 * 1e18,
-            "provider's collateral rate should more than 100%"
+            providerCollateralRatio >= 100 * 1e18,
+            "provider's collateral ratio should more than 100%"
         );
         _repay(msg.sender, provider, peusdAmount);
         uint256 collateralAmount = (((peusdAmount * 1e18) / assetPrice) *
@@ -300,7 +300,7 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @dev Refresh LBR reward before adding providers debt. Refresh Lybra generated service fee before adding totalSupply. Check providers collateralRate cannot below `safeCollateralRate`after minting.
+     * @dev Refresh LBR reward before adding providers debt. Refresh Lybra generated service fee before adding totalSupply. Check providers collateralRatio cannot below `safeCollateralRatio`after minting.
      */
     function _mintPeUSD(
         address _provider,
@@ -396,13 +396,13 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @dev Get USD value of current collateral asset and minted EUSD through price oracle / Collateral asset USD value must higher than safe Collateral Rate.
+     * @dev Get USD value of current collateral asset and minted EUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
      */
     function _checkHealth(address user, uint256 price) internal view {
         if (
             ((depositedAsset[user] * price * 100) / getBorrowedOf(user)) <
-            configurator.getSafeCollateralRate(address(this))
-        ) revert("collateralRate is Below safeCollateralRate");
+            configurator.getSafeCollateralRatio(address(this))
+        ) revert("collateralRatio is Below safeCollateralRatio");
     }
 
     function _updateFee(address user) internal {
@@ -438,7 +438,7 @@ abstract contract LybraPeUSDVaultBase {
         return address(collateralAsset);
     }
 
-    function getvaultType() external pure returns (uint8) {
+    function getVaultType() external pure returns (uint8) {
         return vaultType;
     }
 

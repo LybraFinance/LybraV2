@@ -7,7 +7,7 @@ import "./base/LybraPeUSDVaultBase.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 interface IWBETH {
-    function exchangeRate() external view returns (uint256);
+    function exchangeRatio() external view returns (uint256);
 
     function deposit(address referral) external payable;
 }
@@ -29,7 +29,7 @@ contract LybraWbETHVault is LybraPeUSDVaultBase {
     {}
 
     function depositEtherToMint(uint256 mintAmount) external payable override {
-        require(msg.value >= 1 ether, "Deposit should not be less than 1 ETH.");
+        require(msg.value >= 1 ether, "DNL");
         uint256 preBalance = collateralAsset.balanceOf(address(this));
         IWBETH(address(collateralAsset)).deposit{value: msg.value}(
             address(configurator)
@@ -54,7 +54,7 @@ contract LybraWbETHVault is LybraPeUSDVaultBase {
         uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De)
             .fetchPrice();
         return
-            (etherPrice * IWBETH(address(collateralAsset)).exchangeRate()) /
+            (etherPrice * IWBETH(address(collateralAsset)).exchangeRatio()) /
             1e18;
     }
 }

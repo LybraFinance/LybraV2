@@ -213,11 +213,11 @@ interface ILybra {
 
     function totaldepositedAsset() external view returns (uint256);
 
-    function safeCollateralRate() external view returns (uint256);
+    function safeCollateralRatio() external view returns (uint256);
 
     function redemptionFee() external view returns (uint256);
 
-    function keeperRate() external view returns (uint256);
+    function keeperRatio() external view returns (uint256);
 
     function depositedAsset(address user) external view returns (uint256);
 

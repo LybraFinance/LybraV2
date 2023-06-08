@@ -13,7 +13,7 @@ import "../../OFT/BaseOFTV2.sol";
 contract LBR is BaseOFTV2, ERC20 {
     Iconfigurator public immutable configurator;
     uint256 maxSupply = 100_000_000 * 1e18;
-    uint internal immutable ld2sdRate;
+    uint internal immutable ld2sdRatio;
 
     constructor(
         address _config,
@@ -26,7 +26,7 @@ contract LBR is BaseOFTV2, ERC20 {
             _sharedDecimals <= decimals,
             "OFT: sharedDecimals must be <= decimals"
         );
-        ld2sdRate = 10 ** (decimals - _sharedDecimals);
+        ld2sdRatio = 10 ** (decimals - _sharedDecimals);
     }
 
     function mint(address user, uint256 amount) external returns (bool) {
@@ -90,7 +90,7 @@ contract LBR is BaseOFTV2, ERC20 {
         return _amount;
     }
 
-    function _ld2sdRate() internal view virtual override returns (uint) {
-        return ld2sdRate;
+    function _ld2sdRatio() internal view virtual override returns (uint) {
+        return ld2sdRatio;
     }
 }

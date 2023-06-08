@@ -27,14 +27,14 @@ contract DividendPool is Ownable {
     IesLBR public LBR;
     IesLBRBoost public esLBRBoost;
 
-    // Sum of (reward rate * dt * 1e18 / total supply)
+    // Sum of (reward ratio * dt * 1e18 / total supply)
     uint public rewardPerTokenStored;
     // User address => rewardPerTokenStored
     mapping(address => uint) public userRewardPerTokenPaid;
     // User address => rewards to be claimed
     mapping(address => uint) public rewards;
     mapping(address => uint) public time2fullRedemption;
-    mapping(address => uint) public unstakeRate;
+    mapping(address => uint) public unstakeRatio;
     mapping(address => uint) public lastWithdrawTime;
     uint256 immutable exitCycle = 90 days;
     uint256 public grabableAmount;
@@ -98,10 +98,10 @@ contract DividendPool is Ownable {
         uint256 total = amount;
         if (time2fullRedemption[msg.sender] > block.timestamp) {
             total +=
-                unstakeRate[msg.sender] *
+                unstakeRatio[msg.sender] *
                 (time2fullRedemption[msg.sender] - block.timestamp);
         }
-        unstakeRate[msg.sender] = total / exitCycle;
+        unstakeRatio[msg.sender] = total / exitCycle;
         time2fullRedemption[msg.sender] = block.timestamp + exitCycle;
         emit UnstakeLBR(msg.sender, amount, block.timestamp);
     }
@@ -132,7 +132,7 @@ contract DividendPool is Ownable {
         if (amount > 0) {
             LBR.mint(msg.sender, amount);
         }
-        unstakeRate[msg.sender] = 0;
+        unstakeRatio[msg.sender] = 0;
         time2fullRedemption[msg.sender] = 0;
         grabableAmount += burnAmount;
     }
@@ -157,7 +157,7 @@ contract DividendPool is Ownable {
         uint256 amount = getReservedLBRForVesting(msg.sender) +
             getClaimAbleLBR(msg.sender);
         esLBR.mint(msg.sender, amount);
-        unstakeRate[msg.sender] = 0;
+        unstakeRatio[msg.sender] = 0;
         time2fullRedemption[msg.sender] = 0;
         emit Restake(msg.sender, amount, block.timestamp);
     }
@@ -181,9 +181,9 @@ contract DividendPool is Ownable {
     ) public view returns (uint256 amount) {
         if (time2fullRedemption[user] > lastWithdrawTime[user]) {
             amount = block.timestamp > time2fullRedemption[user]
-                ? unstakeRate[user] *
+                ? unstakeRatio[user] *
                     (time2fullRedemption[user] - lastWithdrawTime[user])
-                : unstakeRate[user] *
+                : unstakeRatio[user] *
                     (block.timestamp - lastWithdrawTime[user]);
         }
     }
@@ -193,7 +193,7 @@ contract DividendPool is Ownable {
     ) public view returns (uint256 amount) {
         if (time2fullRedemption[user] > block.timestamp) {
             amount =
-                unstakeRate[user] *
+                unstakeRatio[user] *
                 (time2fullRedemption[user] - block.timestamp);
         }
     }

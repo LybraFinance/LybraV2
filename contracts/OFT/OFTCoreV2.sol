@@ -183,17 +183,17 @@ abstract contract OFTCoreV2 is NonblockingLzApp {
     }
 
     function _ld2sd(uint _amount) internal virtual view returns (uint64) {
-        uint amountSD = _amount / _ld2sdRate();
+        uint amountSD = _amount / _ld2sdRatio();
         require(amountSD <= type(uint64).max, "OFTCore: amountSD overflow");
         return uint64(amountSD);
     }
 
     function _sd2ld(uint64 _amountSD) internal virtual view returns (uint) {
-        return _amountSD * _ld2sdRate();
+        return _amountSD * _ld2sdRatio();
     }
 
     function _removeDust(uint _amount) internal virtual view returns (uint amountAfter, uint dust) {
-        dust = _amount % _ld2sdRate();
+        dust = _amount % _ld2sdRatio();
         amountAfter = _amount - dust;
     }
 
@@ -239,5 +239,5 @@ abstract contract OFTCoreV2 is NonblockingLzApp {
 
     function _transferFrom(address _from, address _to, uint _amount) internal virtual returns (uint);
 
-    function _ld2sdRate() internal view virtual returns (uint);
+    function _ld2sdRatio() internal view virtual returns (uint);
 }

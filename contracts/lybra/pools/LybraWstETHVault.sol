@@ -6,38 +6,50 @@ import "../interfaces/IEUSD.sol";
 import "./base/LybraPeUSDVaultBase.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-interface IRETH {
-    function getExchangeRatio() external view returns (uint256);
+interface IWstETH {
+    function stEthPerToken() external view returns (uint256);
+
+    function wrap(uint256 _stETHAmount) external returns (uint256);
 }
 
-interface IRkPool {
-    function deposit() external payable;
+interface Ilido {
+    function submit(address _referral) external payable returns (uint256 StETH);
+
+    function approve(address spender, uint256 amount) external returns (bool);
 }
 
 interface IPriceFeed {
     function fetchPrice() external returns (uint256);
 }
 
-contract LybraRETHVault is LybraPeUSDVaultBase {
-    IRkPool rkPool = IRkPool(0xDD3f50F8A6CafbE9b31a427582963f465E745AF8);
-
+contract LybraWstETHVault is LybraPeUSDVaultBase {
     constructor(
         address _peusd,
         address _config
     )
         LybraPeUSDVaultBase(
             _peusd,
-            0xae78736Cd615f374D3085123A210448E74Fc6393,
+            0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0,
             _config
         )
     {}
 
     function depositEtherToMint(uint256 mintAmount) external payable override {
         require(msg.value >= 1 ether, "DNL");
-        uint256 preBalance = collateralAsset.balanceOf(address(this));
-        rkPool.deposit{value: msg.value}();
-        uint256 balance = collateralAsset.balanceOf(address(this));
-        depositedAsset[msg.sender] += balance - preBalance;
+        Ilido lido = Ilido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+
+        uint256 sharesAmount = lido.submit{value: msg.value}(
+            address(configurator)
+        );
+        require(sharesAmount > 0, "ZERO_DEPOSIT");
+
+        lido.approve(address(collateralAsset), msg.value);
+
+        uint256 wstETHAmount = IWstETH(address(collateralAsset)).wrap(
+            msg.value
+        );
+
+        depositedAsset[msg.sender] += wstETHAmount;
 
         if (mintAmount > 0) {
             _mintPeUSD(msg.sender, msg.sender, mintAmount, getAssetPrice());
@@ -47,21 +59,16 @@ contract LybraRETHVault is LybraPeUSDVaultBase {
             msg.sender,
             address(collateralAsset),
             msg.value,
-            balance - preBalance,
+            wstETHAmount,
             block.timestamp
         );
-    }
-
-    function setRkPool(address addr) external {
-        require(configurator.hasRole(keccak256("TIMELOCK"), msg.sender));
-        rkPool = IRkPool(addr);
     }
 
     function getAssetPrice() public override returns (uint256) {
         uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De)
             .fetchPrice();
         return
-            (etherPrice * IRETH(address(collateralAsset)).getExchangeRatio()) /
+            (etherPrice * IWstETH(address(collateralAsset)).stEthPerToken()) /
             1e18;
     }
 }

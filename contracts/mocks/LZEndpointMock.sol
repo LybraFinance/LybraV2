@@ -385,11 +385,11 @@ contract LZEndpointMock is ILayerZeroEndpoint {
         uint remoteGasTotal = relayerFeeConfig.dstGasPriceInWei * (relayerFeeConfig.baseGas + extraGas);
         totalRemoteToken += remoteGasTotal;
 
-        // tokenConversionRate = dstPrice / localPrice
-        // basePrice = totalRemoteToken * tokenConversionRate
+        // tokenConversionRatio = dstPrice / localPrice
+        // basePrice = totalRemoteToken * tokenConversionRatio
         uint basePrice = (totalRemoteToken * relayerFeeConfig.dstPriceRatio) / 10**10;
 
-        // pricePerByte = (dstGasPriceInWei * gasPerBytes) * tokenConversionRate
+        // pricePerByte = (dstGasPriceInWei * gasPerBytes) * tokenConversionRatio
         uint pricePerByte = (relayerFeeConfig.dstGasPriceInWei * relayerFeeConfig.gasPerByte * relayerFeeConfig.dstPriceRatio) / 10**10;
 
         return basePrice + _payloadSize * pricePerByte;

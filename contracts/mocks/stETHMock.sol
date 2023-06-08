@@ -102,7 +102,7 @@ contract stETHMock is IERC20 {
     }
 
     /**
-     * @dev mock stETH are expanding at a rate of 1% a day
+     * @dev mock stETH are expanding at a ratio of 1% a day
      */
     function _getTotalMintedEUSD() internal view returns (uint256) {
         return totalEther + totalEther * (block.timestamp - updateTime) / 100 days ;
