@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.17;
 /**
- * @title esLBRMiner is a stripped down version of Synthetix StakingRewards.sol, to reward esLBR to EUSD minters.
+ * @title tokenMiner is a stripped down version of Synthetix StakingRewards.sol, to reward esLBR to EUSD minters.
  * Differences from the original contract,
  * - Get `totalStaked` from totalSupply() in contract EUSD.
  * - Get `stakedOf(user)` from getBorrowedOf(user) in contract EUSD.
@@ -55,13 +55,16 @@ contract EUSDMiningIncentives is Ownable {
         AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
 
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
-    event BuyReward(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, uint256 time);
+    event BuyReward(
+        address indexed user,
+        address indexed Victim,
+        uint256 buyAmount,
+        uint256 biddingFee,
+        uint256 time
+    );
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
-    constructor(
-        address _config,
-        address _boost
-    ) {
+    constructor(address _config, address _boost) {
         configurator = Iconfigurator(_config);
         esLBRBoost = IesLBRBoost(_boost);
         EUSD = IEUSD(configurator.getEUSDAddress());
@@ -89,8 +92,8 @@ contract EUSDMiningIncentives is Ownable {
     }
 
     function setPools(address[] memory _pools) external onlyOwner {
-        for(uint i = 0; i < _pools.length; i++) {
-            require(configurator.mintPool(_pools[i]), "");
+        for (uint i = 0; i < _pools.length; i++) {
+            require(configurator.mintVault(_pools[i]), "");
         }
         pools = _pools;
     }
@@ -124,10 +127,10 @@ contract EUSDMiningIncentives is Ownable {
 
     function stakedOf(address user) public view returns (uint256) {
         uint256 amount;
-        for(uint i=0;i<pools.length;i++) {
+        for (uint i = 0; i < pools.length; i++) {
             ILybra pool = ILybra(pools[i]);
             uint borrowed = pool.getBorrowedOf(user);
-            if(pool.getBorrowType() == 1) {
+            if (pool.getBorrowType() == 1) {
                 borrowed = EUSD.getMintedEUSDByShares(borrowed);
             }
             amount += borrowed;
@@ -137,11 +140,17 @@ contract EUSDMiningIncentives is Ownable {
 
     function stakedLBRLpValue(address user) public view returns (uint256) {
         uint256 totalLp = IEUSD(ethlbrLpToken).totalSupply();
-        uint256 lpInethlbrStakePool = IEUSD(ethlbrLpToken).balanceOf(ethlbrStakePool);
-        (,int price,,,) = priceFeed.latestRoundData();
-        uint256 lbrInLp = IEUSD(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2).balanceOf(ethlbrLpToken) * uint(price) / 1e8;
+        uint256 lpInethlbrStakePool = IEUSD(ethlbrLpToken).balanceOf(
+            ethlbrStakePool
+        );
+        (, int price, , , ) = priceFeed.latestRoundData();
+        uint256 lbrInLp = (IEUSD(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2)
+            .balanceOf(ethlbrLpToken) * uint(price)) / 1e8;
         uint256 userStaked = IEUSD(ethlbrStakePool).balanceOf(user);
-        return userStaked * lbrInLp * lpInethlbrStakePool * 2 / totalLp / IEUSD(ethlbrStakePool).totalSupply();
+        return
+            (userStaked * lbrInLp * lpInethlbrStakePool * 2) /
+            totalLp /
+            IEUSD(ethlbrStakePool).totalSupply();
     }
 
     function lastTimeRewardApplicable() public view returns (uint256) {
@@ -159,7 +168,6 @@ contract EUSDMiningIncentives is Ownable {
             totalStaked();
     }
 
-
     /**
      * @notice Update user's claimable reward data and record the timestamp.
      */
@@ -170,11 +178,15 @@ contract EUSDMiningIncentives is Ownable {
         if (configurator.isRedemptionProvider(_account)) {
             redemptionBoost = extraRate;
         }
-        return 100 * 1e18 + redemptionBoost + esLBRBoost.getUserBoost(
-            _account,
-            userUpdatedAt[_account],
-            finishAt
-        );
+        return
+            100 *
+            1e18 +
+            redemptionBoost +
+            esLBRBoost.getUserBoost(
+                _account,
+                userUpdatedAt[_account],
+                finishAt
+            );
     }
 
     function earned(address _account) public view returns (uint256) {
@@ -186,11 +198,14 @@ contract EUSDMiningIncentives is Ownable {
     }
 
     function buyAbleByOther(address user) public view returns (bool) {
-        return stakedLBRLpValue(user) * 10000 / stakedOf(user) < 500;
+        return (stakedLBRLpValue(user) * 10000) / stakedOf(user) < 500;
     }
 
     function getReward() external updateReward(msg.sender) {
-        require(!buyAbleByOther(msg.sender), "Insufficient DLP, unable to claim rewards");
+        require(
+            !buyAbleByOther(msg.sender),
+            "Insufficient DLP, unable to claim rewards"
+        );
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
@@ -200,26 +215,30 @@ contract EUSDMiningIncentives is Ownable {
     }
 
     function getOtherReward(address user) external updateReward(user) {
-        require(buyAbleByOther(user), "The rewards of the user cannot be bought out");
+        require(
+            buyAbleByOther(user),
+            "The rewards of the user cannot be bought out"
+        );
         uint256 reward = rewards[user];
         if (reward > 0) {
             rewards[user] = 0;
-            uint256 biddingFee = reward * biddingFeeRatio / 10000;
+            uint256 biddingFee = (reward * biddingFeeRatio) / 10000;
             IesLBR(LBR).burn(msg.sender, biddingFee);
             IesLBR(esLBR).mint(msg.sender, reward);
-            // if(burnAmount < biddingFee && block.timestamp < finishAt) {
-            //     rewardRate += (biddingFee - burnAmount) / (finishAt - block.timestamp);
-            //     updatedAt = block.timestamp;
-            // }
-            emit BuyReward(msg.sender, user, reward, biddingFee, block.timestamp);
+
+            emit BuyReward(
+                msg.sender,
+                user,
+                reward,
+                biddingFee,
+                block.timestamp
+            );
         }
     }
 
-    function notifyRewardAmount(uint256 amount)
-        external
-        onlyOwner
-        updateReward(address(0))
-    {
+    function notifyRewardAmount(
+        uint256 amount
+    ) external onlyOwner updateReward(address(0)) {
         require(amount > 0, "amount = 0");
         if (block.timestamp >= finishAt) {
             rewardRate = amount / duration;

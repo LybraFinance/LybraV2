@@ -86,16 +86,16 @@ contract EUSDMock is IERC20, Context {
         uint256 sharesAmount
     );
 
-    modifier onlyMintPool() {
-        require(configurator.mintPool(msg.sender), "");
+    modifier onlyMintVault() {
+        require(configurator.mintVault(msg.sender), "");
         _;
     }
     modifier MintPaused() {
-        require(!configurator.poolMintPaused(msg.sender), "");
+        require(!configurator.vaultMintPaused(msg.sender), "");
         _;
     }
     modifier BurnPaused() {
-        require(!configurator.poolBurnPaused(msg.sender), "");
+        require(!configurator.vaultBurnPaused(msg.sender), "");
         _;
     }
 
@@ -248,7 +248,7 @@ contract EUSDMock is IERC20, Context {
         uint256 amount
     ) public returns (bool) {
         address spender = _msgSender();
-        if(!configurator.mintPool(spender)) {
+        if(!configurator.mintVault(spender)) {
             _spendAllowance(from, spender, amount);
         }
         _transfer(from, to, amount);
@@ -463,7 +463,7 @@ contract EUSDMock is IERC20, Context {
     function mint(
         address _recipient,
         uint256 _mintAmount
-    ) external onlyMintPool MintPaused returns (uint256 newTotalShares) {
+    ) external onlyMintVault MintPaused returns (uint256 newTotalShares) {
         require(_recipient != address(0), "MINT_TO_THE_ZERO_ADDRESS");
 
         uint256 sharesAmount = getSharesByMintedEUSD(_mintAmount);
@@ -496,7 +496,7 @@ contract EUSDMock is IERC20, Context {
     function burn(
         address _account,
         uint256 _burnAmount
-    ) external onlyMintPool BurnPaused returns (uint256 newTotalShares) {
+    ) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
         uint256 sharesAmount = getSharesByMintedEUSD(_burnAmount);
         newTotalShares = _onlyBurnShares(_account, sharesAmount);
@@ -518,7 +518,7 @@ contract EUSDMock is IERC20, Context {
     function burnShares(
         address _account,
         uint256 _sharesAmount
-    ) external onlyMintPool BurnPaused returns (uint256 newTotalShares) {
+    ) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
         newTotalShares = _onlyBurnShares(_account, _sharesAmount);
     }

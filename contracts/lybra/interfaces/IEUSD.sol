@@ -10,7 +10,10 @@ interface IEUSD {
 
     function sharesOf(address _account) external view returns (uint256);
 
-    function allowance(address owner, address spender) external view returns (uint256);
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
 
     function transferFrom(
         address from,
@@ -34,7 +37,7 @@ interface IEUSD {
     function mint(
         address _recipient,
         uint256 _mintAmount
-    ) external  returns (uint256 newTotalShares);
+    ) external returns (uint256 newTotalShares);
 
     function burnShares(
         address _account,

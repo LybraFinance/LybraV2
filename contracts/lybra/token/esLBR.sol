@@ -19,27 +19,32 @@ contract esLBR is ERC20Votes {
 
     uint256 maxSupply = 100_000_000 * 1e18;
 
-    constructor(
-        address _config
-    ) ERC20Permit("esLBR") ERC20("esLBR", "esLBR") {
+    constructor(address _config) ERC20Permit("esLBR") ERC20("esLBR", "esLBR") {
         configurator = Iconfigurator(_config);
     }
 
-    function _transfer(address from, address to, uint256 amount) internal virtual override {
+    function _transfer(address, address, uint256) internal virtual override {
         revert("not authorized");
     }
 
-    function mint(address user, uint256 amount) external returns(bool) {
-        require(configurator.esLBRMiner(msg.sender), "not authorized");
-        require(totalSupply() + amount <= maxSupply, "exceeding the maximum supply quantity.");
-        try IdividendPool(configurator.getDividendPool()).refreshReward(user) {} catch {}
+    function mint(address user, uint256 amount) external returns (bool) {
+        require(configurator.tokenMiner(msg.sender), "not authorized");
+        require(
+            totalSupply() + amount <= maxSupply,
+            "exceeding the maximum supply quantity."
+        );
+        try
+            IdividendPool(configurator.getDividendPool()).refreshReward(user)
+        {} catch {}
         _mint(user, amount);
         return true;
     }
 
-    function burn(address user, uint256 amount) external returns(bool) {
-        require(configurator.esLBRMiner(msg.sender), "not authorized");
-        try IdividendPool(configurator.getDividendPool()).refreshReward(user) {} catch {}
+    function burn(address user, uint256 amount) external returns (bool) {
+        require(configurator.tokenMiner(msg.sender), "not authorized");
+        try
+            IdividendPool(configurator.getDividendPool()).refreshReward(user)
+        {} catch {}
         _burn(user, amount);
         return true;
     }

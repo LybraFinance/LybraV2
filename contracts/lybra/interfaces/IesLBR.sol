@@ -6,4 +6,6 @@ interface IesLBR {
     function balanceOf(address account) external view returns (uint256);
     function mint(address user, uint256 amount) external returns(bool);
     function burn(address user, uint256 amount) external returns(bool);
+    function getPastVotes(address account, uint256 timepoint) external view returns (uint256);
+    function getPastTotalSupply(uint256 timepoint) external view returns (uint256);
 }

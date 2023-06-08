@@ -22,7 +22,7 @@ contract LybraHelper is Ownable {
     AggregatorV3Interface internal priceFeed =
         AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
 
-    constructor(address _lido,address _config) {
+    constructor(address _lido, address _config) {
         lido = _lido;
         configurator = Iconfigurator(_config);
     }
@@ -30,20 +30,16 @@ contract LybraHelper is Ownable {
     function setPools(address[] memory _pools) external onlyOwner {
         pools = _pools;
     }
+
     function setEthlbrStakePool(address _pool, address _lp) external onlyOwner {
         ethlbrStakePool = _pool;
         ethlbrLpToken = _lp;
     }
 
     function getAssetPrice(address pool) public view returns (uint256) {
-        if(ILybra(pool).getBorrowType() == 1) {
-            (
-                /* uint80 roundID */,
-                int price,
-                /*uint startedAt*/,
-                /*uint timeStamp*/,
-                /*uint80 answeredInRound*/
-            ) = priceFeed.latestRoundData();
+        if (ILybra(pool).getBorrowType() == 1) {
+            (, /* uint80 roundID */ int price, , , ) = /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/
+            priceFeed.latestRoundData();
             return uint256(price);
         } else {
             return 0;
@@ -52,36 +48,39 @@ contract LybraHelper is Ownable {
 
     function getTotalStakedOf(address user) external view returns (uint256) {
         uint256 amount;
-        for(uint i=0;i<pools.length;i++) {
+        for (uint i = 0; i < pools.length; i++) {
             ILybra pool = ILybra(pools[i]);
             uint borrowed = pool.getBorrowedOf(user);
-            if(pool.getBorrowType() == 1) {
-                borrowed = IEUSD(configurator.getEUSDAddress()).getMintedEUSDByShares(borrowed);
+            if (pool.getBorrowType() == 1) {
+                borrowed = IEUSD(configurator.getEUSDAddress())
+                    .getMintedEUSDByShares(borrowed);
             }
             amount += borrowed;
         }
         return amount;
     }
 
-    function getCollateralRate(address user, address pool) public view returns (uint256) {
+    function getCollateralRate(
+        address user,
+        address pool
+    ) public view returns (uint256) {
         ILybra lybraPool = ILybra(pool);
-        if(lybraPool.getBorrowType() != 0)  return 0;
+        if (lybraPool.getBorrowType() != 0) return 0;
         if (lybraPool.getBorrowedOf(user) == 0) return 1e22;
         return
             (lybraPool.depositedAsset(user) * getAssetPrice(pool) * 1e12) /
             lybraPool.getBorrowedOf(user);
     }
 
-    function getExcessIncomeAmount(address pool)
-        external
-        view
-        returns (uint256 eusdAmount)
-    {
+    function getExcessIncomeAmount(
+        address pool
+    ) external view returns (uint256 eusdAmount) {
         ILybra lybraPool = ILybra(pool);
-        if(lybraPool.getBorrowType() != 0) return 0;
+        if (lybraPool.getBorrowType() != 0) return 0;
         address asset = lybraPool.getAsset();
         if (
-            IERC20(asset).balanceOf(address(pool)) < lybraPool.totaldepositedAsset()
+            IERC20(asset).balanceOf(address(pool)) <
+            lybraPool.totaldepositedAsset()
         ) {
             eusdAmount = 0;
         } else {
@@ -92,18 +91,19 @@ contract LybraHelper is Ownable {
         }
     }
 
-    function getOverallCollateralRate(address pool) public view returns (uint256) {
+    function getOverallCollateralRate(
+        address pool
+    ) public view returns (uint256) {
         ILybra lybraPool = ILybra(pool);
         return
             (lybraPool.totaldepositedAsset() * getAssetPrice(pool) * 1e12) /
             lybraPool.poolTotalEUSDCirculation();
     }
 
-    function getLiquidateableAmount(address user, address pool)
-        external
-        view
-        returns (uint256 etherAmount, uint256 eusdAmount)
-    {
+    function getLiquidateableAmount(
+        address user,
+        address pool
+    ) external view returns (uint256 etherAmount, uint256 eusdAmount) {
         ILybra lybraPool = ILybra(pool);
         if (getCollateralRate(user, pool) > 150 * 1e18) return (0, 0);
         if (
@@ -116,7 +116,9 @@ contract LybraHelper is Ownable {
             etherAmount = lybraPool.depositedAsset(user);
             eusdAmount = (etherAmount * getAssetPrice(pool)) / 1e8;
             if (getCollateralRate(user, pool) >= 1e20) {
-                eusdAmount = (eusdAmount * 1e20) / getCollateralRate(user, pool);
+                eusdAmount =
+                    (eusdAmount * 1e20) /
+                    getCollateralRate(user, pool);
             }
         }
     }
@@ -138,24 +140,26 @@ contract LybraHelper is Ownable {
     //     }
     // }
 
-    function getLiquidateFund(address user, address pool)
-        external
-        view
-        returns (uint256 eusdAmount)
-    {
-        uint256 appro = IEUSD(configurator.getEUSDAddress()).allowance(user, address(pool));
+    function getLiquidateFund(
+        address user,
+        address pool
+    ) external view returns (uint256 eusdAmount) {
+        uint256 appro = IEUSD(configurator.getEUSDAddress()).allowance(
+            user,
+            address(pool)
+        );
         if (appro == 0) return 0;
         uint256 bal = IEUSD(configurator.getEUSDAddress()).balanceOf(user);
         eusdAmount = appro > bal ? bal : appro;
     }
 
-    function getWithdrawableAmount(address user, address pool)
-        external
-        view
-        returns (uint256)
-    {
+    function getWithdrawableAmount(
+        address user,
+        address pool
+    ) external view returns (uint256) {
         ILybra lybraPool = ILybra(pool);
-        if (lybraPool.getBorrowedOf(user) == 0) return lybraPool.depositedAsset(user);
+        if (lybraPool.getBorrowedOf(user) == 0)
+            return lybraPool.depositedAsset(user);
         uint256 safeCollateralRate = lybraPool.safeCollateralRate();
         if (getCollateralRate(user, pool) <= safeCollateralRate) return 0;
         return
@@ -164,11 +168,10 @@ contract LybraHelper is Ownable {
             getCollateralRate(user, pool);
     }
 
-    function getEusdMintableAmount(address user, address pool)
-        external
-        view
-        returns (uint256 eusdAmount)
-    {
+    function getEusdMintableAmount(
+        address user,
+        address pool
+    ) external view returns (uint256 eusdAmount) {
         ILybra lybraPool = ILybra(pool);
         uint256 safeCollateralRate = lybraPool.safeCollateralRate();
         if (getCollateralRate(user, pool) <= safeCollateralRate) return 0;
@@ -193,9 +196,15 @@ contract LybraHelper is Ownable {
             (pool_lp_stake * lp_lbr_amount * 2);
     }
 
-    function getTokenPrice(address token, address UniPool, address wethAddress) external view returns (uint256 price) {
+    function getTokenPrice(
+        address token,
+        address UniPool,
+        address wethAddress
+    ) external view returns (uint256 price) {
         uint256 token_in_pool = IERC20(token).balanceOf(UniPool);
         uint256 weth_in_pool = IERC20(wethAddress).balanceOf(UniPool);
-        price = weth_in_pool * getAssetPrice(msg.sender) * 1e10 / token_in_pool;
+        price =
+            (weth_in_pool * getAssetPrice(msg.sender) * 1e10) /
+            token_in_pool;
     }
 }

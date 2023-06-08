@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
 
-
 /**
  * @title Lybra Protocol V2 Configurator Contract
  * @dev The Configurator contract is used to set various parameters and control functionalities of the Lybra Protocol. It is based on OpenZeppelin's Proxy and AccessControl libraries, allowing the DAO to control contract upgrades. There are three types of governance roles:
@@ -15,7 +14,7 @@
 
 pragma solidity ^0.8.17;
 
-import "../governance/governance.sol";
+import "../interfaces/IGovernanceTimelock.sol";
 import "../interfaces/IEUSD.sol";
 
 interface DividendPool {
@@ -26,20 +25,21 @@ interface IeUSDMiningIncentives {
     function refreshReward(address user) external;
 }
 
-contract Configurator is Governance {
-    mapping(address => bool) public mintPool;
-    mapping(address => uint256) public mintPoolMaxSupply;
-    mapping(address => bool) public poolMintPaused;
-    mapping(address => bool) public poolBurnPaused;
-    mapping(address => uint256) poolSafeCollateralRate;
-    mapping(address => uint256) public poolMintFeeApy;
-    mapping(address => uint256) public poolKeeperRate;
+contract Configurator {
+    mapping(address => bool) public mintVault;
+    mapping(address => uint256) public mintVaultMaxSupply;
+    mapping(address => bool) public vaultMintPaused;
+    mapping(address => bool) public vaultBurnPaused;
+    mapping(address => uint256) vaultSafeCollateralRate;
+    mapping(address => uint256) public vaultMintFeeApy;
+    mapping(address => uint256) public vaultKeeperRate;
     mapping(address => bool) redemptionProvider;
-    mapping(address => bool) public esLBRMiner;
+    mapping(address => bool) public tokenMiner;
 
     // uint256 public safeCollateralRate = 160 * 1e18;
     uint256 public immutable badCollateralRate = 150 * 1e18;
     uint256 public redemptionFee = 50;
+    IGovernanceTimelock public GovernanceTimelock;
 
     IeUSDMiningIncentives public eUSDMiningIncentives;
     DividendPool public lybraDividendPool;
@@ -55,26 +55,38 @@ contract Configurator is Governance {
     event EUSDMiningIncentivesChanged(address indexed pool, uint256 timestamp);
     event BorrowApyChanged(address indexed pool, uint256 newApy);
     event KeeperRateChanged(address indexed pool, uint256 newSlippage);
-    event esLBRMinerChanges(address indexed pool, bool status);
+    event tokenMinerChanges(address indexed pool, bool status);
 
     /// @notice Emitted when the fees for flash loaning a token have been updated
-	/// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
-	event FlashloanFeeUpdated(uint256 fee);
+    /// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
+    event FlashloanFeeUpdated(uint256 fee);
 
+    bytes32 public constant DAO = keccak256("DAO");
+    bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
+    bytes32 public constant ADMIN = keccak256("ADMIN");
 
     /// @notice Thrown when trying to update token fees to an invalid percentage
-	error InvalidPercentage();
-   
+    error InvalidPercentage();
 
-    constructor(address _dao) Governance(_dao) {
+    constructor(address _dao) {
+        GovernanceTimelock = IGovernanceTimelock(_dao);
+    }
 
+    modifier onlyRole(bytes32 role) {
+        GovernanceTimelock.checkOnlyRole(role, msg.sender);
+        _;
+    }
+
+    modifier checkRole(bytes32 role) {
+        GovernanceTimelock.checkRole(role, msg.sender);
+        _;
     }
 
     /**
      * @notice Initializes the eUSD address. This function can only be executed once.
      */
-    function initEUSD(address _eusd) external onlyRole(DAO){
-        if(address(EUSD) == address(0)) EUSD = IEUSD(_eusd);
+    function initEUSD(address _eusd) external onlyRole(DAO) {
+        if (address(EUSD) == address(0)) EUSD = IEUSD(_eusd);
     }
 
     /**
@@ -83,8 +95,8 @@ contract Configurator is Governance {
      * @param isActive A boolean indicating whether to activate or deactivate the vault.
      * @dev This function can only be called by the DAO.
      */
-    function setMintPool(address pool, bool isActive) external onlyRole(DAO){
-        mintPool[pool] = isActive;
+    function setmintVault(address pool, bool isActive) external onlyRole(DAO) {
+        mintVault[pool] = isActive;
     }
 
     /**
@@ -93,8 +105,11 @@ contract Configurator is Governance {
      * @param maxSupply The maximum amount of eUSD that can be minted for the asset pool.
      * @dev This function can only be called by the DAO.
      */
-    function setMintPoolMaxSupply(address pool, uint256 maxSupply) external onlyRole(DAO){
-        mintPoolMaxSupply[pool] = maxSupply;
+    function setmintVaultMaxSupply(
+        address pool,
+        uint256 maxSupply
+    ) external onlyRole(DAO) {
+        mintVaultMaxSupply[pool] = maxSupply;
     }
 
     /**
@@ -112,7 +127,9 @@ contract Configurator is Governance {
      * @param addr The new address of the eUSDMiningIncentives pool.
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
      */
-    function setEUSDMiningIncentives(address addr) external checkRole(TIMELOCK) {
+    function setEUSDMiningIncentives(
+        address addr
+    ) external checkRole(TIMELOCK) {
         eUSDMiningIncentives = IeUSDMiningIncentives(addr);
         emit EUSDMiningIncentivesChanged(addr, block.timestamp);
     }
@@ -123,8 +140,11 @@ contract Configurator is Governance {
      * @param isActive Boolean value indicating whether repayment is active or paused.
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
      */
-    function setPoolBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK){
-        poolBurnPaused[pool] = isActive;
+    function setvaultBurnPaused(
+        address pool,
+        bool isActive
+    ) external checkRole(TIMELOCK) {
+        vaultBurnPaused[pool] = isActive;
     }
 
     /**
@@ -133,8 +153,11 @@ contract Configurator is Governance {
      * @param isActive Boolean value indicating whether minting is active or paused.
      * @dev This function can only be called by accounts with ADMIN or higher privilege.
      */
-    function setPoolMintPaused(address pool, bool isActive) external checkRole(ADMIN){
-        poolMintPaused[pool] = isActive;
+    function setvaultMintPaused(
+        address pool,
+        bool isActive
+    ) external checkRole(ADMIN) {
+        vaultMintPaused[pool] = isActive;
     }
 
     /**
@@ -151,12 +174,15 @@ contract Configurator is Governance {
     /**
      * @notice  safeCollateralRate can be decided by TIMELOCK,starts at 160%
      */
-    function setSafeCollateralRate(address pool, uint256 newRatio) external checkRole(TIMELOCK) {
+    function setSafeCollateralRate(
+        address pool,
+        uint256 newRatio
+    ) external checkRole(TIMELOCK) {
         require(
             newRatio >= 160 * 1e18,
             "Safe CollateralRate should more than 160%"
         );
-        poolSafeCollateralRate[pool] = newRatio;
+        vaultSafeCollateralRate[pool] = newRatio;
         emit SafeCollateralRateChanged(pool, newRatio);
     }
 
@@ -165,9 +191,12 @@ contract Configurator is Governance {
      * @param pool The address of the pool to set the borrowing APY for.
      * @param newApy The new borrowing APY to set, limited to a maximum of 2%.
      */
-    function setBorrowApy(address pool, uint256 newApy) external checkRole(TIMELOCK) {
+    function setBorrowApy(
+        address pool,
+        uint256 newApy
+    ) external checkRole(TIMELOCK) {
         require(newApy <= 200, "Borrow APY cannot exceed 2%");
-        poolMintFeeApy[pool] = newApy;
+        vaultMintFeeApy[pool] = newApy;
         emit BorrowApyChanged(pool, newApy);
     }
 
@@ -176,21 +205,27 @@ contract Configurator is Governance {
      * @param pool The address of the pool to set the reward rate for.
      * @param newRate The new reward rate to set, limited to a maximum of 5%.
      */
-    function setKeeperRate(address pool, uint256 newRate) external checkRole(TIMELOCK) {
+    function setKeeperRate(
+        address pool,
+        uint256 newRate
+    ) external checkRole(TIMELOCK) {
         require(newRate <= 5, "Max Keeper reward is 5%");
-        poolKeeperRate[pool] = newRate;
+        vaultKeeperRate[pool] = newRate;
         emit KeeperRateChanged(pool, newRate);
     }
 
     /**
-     * @notice Sets the mining permission for the esLBR mining pool.
+     * @notice Sets the mining permission for the esLBR&LBR mining pool.
      * @param _contracts An array of addresses representing the contracts.
      * @param _bools An array of booleans indicating whether mining is allowed for each contract.
      */
-    function setEsLBRMiner(address[] calldata _contracts, bool[] calldata _bools) external checkRole(TIMELOCK) {
-        for(uint256 i = 0;i<_contracts.length;i++) {
-            esLBRMiner[_contracts[i]] = _bools[i];
-            emit esLBRMinerChanges(_contracts[i], _bools[i]);
+    function setTokenMiner(
+        address[] calldata _contracts,
+        bool[] calldata _bools
+    ) external checkRole(TIMELOCK) {
+        for (uint256 i = 0; i < _contracts.length; i++) {
+            tokenMiner[_contracts[i]] = _bools[i];
+            emit tokenMinerChanges(_contracts[i], _bools[i]);
         }
     }
 
@@ -204,12 +239,12 @@ contract Configurator is Governance {
     }
 
     /// @notice Update the flashloan fee percentage, only available to the manager of the contract
-	/// @param fee The fee percentage for eUSD, multiplied by 100 (for example, 10% is 1000)
-	function setFlashloanFee(uint256 fee) external checkRole(TIMELOCK) {
-		if (fee > 10_000) revert InvalidPercentage();
-		emit FlashloanFeeUpdated(fee);
+    /// @param fee The fee percentage for eUSD, multiplied by 100 (for example, 10% is 1000)
+    function setFlashloanFee(uint256 fee) external checkRole(TIMELOCK) {
+        if (fee > 10_000) revert InvalidPercentage();
+        emit FlashloanFeeUpdated(fee);
         flashloanFee = fee;
-	}
+    }
 
     /**
      * @notice User chooses to become a Redemption Provider
@@ -227,14 +262,13 @@ contract Configurator is Governance {
         eUSDMiningIncentives.refreshReward(user);
     }
 
-
     /**
      * @dev Distributes the temporarily held eUSD fees to the esLBR holders.
      * @dev Requires the eUSD balance in the contract to be greater than 1000.
      */
     function distributeDividends() external {
         uint256 balance = EUSD.balanceOf(address(this));
-        if(balance > 1e21) {
+        if (balance > 1e21) {
             EUSD.transfer(address(lybraDividendPool), balance);
             lybraDividendPool.notifyRewardAmount(balance);
         }
@@ -244,7 +278,7 @@ contract Configurator is Governance {
      * @dev Returns the address of the eUSD token.
      * @return The address of the eUSD token.
      */
-    function getEUSDAddress() external view returns(address) {
+    function getEUSDAddress() external view returns (address) {
         return address(EUSD);
     }
 
@@ -252,18 +286,20 @@ contract Configurator is Governance {
      * @dev Returns the address of the Lybra dividend pool.
      * @return The address of the Lybra dividend pool.
      */
-    function getDividendPool() external view returns(address) {
+    function getDividendPool() external view returns (address) {
         return address(lybraDividendPool);
     }
-    
+
     /**
      * @dev Returns the safe collateral rate for a asset pool.
      * @param pool The address of the pool to check.
      * @return The safe collateral rate for the specified pool.
      */
-    function getSafeCollateralRate(address pool) external view returns(uint256) {
-        if(poolSafeCollateralRate[pool] == 0) return 160 * 1e18;
-        return poolSafeCollateralRate[pool];
+    function getSafeCollateralRate(
+        address pool
+    ) external view returns (uint256) {
+        if (vaultSafeCollateralRate[pool] == 0) return 160 * 1e18;
+        return vaultSafeCollateralRate[pool];
     }
 
     /**
@@ -280,6 +316,13 @@ contract Configurator is Governance {
      * @return The maximum supply of PeUSD.
      */
     function getPeUSDMaxSupply() external view returns (uint256) {
-        return EUSD.totalSupply() * maxStableRatio / 10_000;
+        return (EUSD.totalSupply() * maxStableRatio) / 10_000;
+    }
+
+    function hasRole(
+        bytes32 role,
+        address caller
+    ) external view returns (bool) {
+        return GovernanceTimelock.checkOnlyRole(role, caller);
     }
 }

@@ -46,11 +46,7 @@ contract StakingRewardsV2 is Ownable {
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
-    constructor(
-        address _stakingToken,
-        address _rewardToken,
-        address _boost
-    ) {
+    constructor(address _stakingToken, address _rewardToken, address _boost) {
         stakingToken = IERC20(_stakingToken);
         rewardsToken = IesLBR(_rewardToken);
         esLBRBoost = IesLBRBoost(_boost);
@@ -89,7 +85,11 @@ contract StakingRewardsV2 is Ownable {
     // Allows users to stake a specified amount of tokens
     function stake(uint256 _amount) external updateReward(msg.sender) {
         require(_amount > 0, "amount = 0");
-        bool success = stakingToken.transferFrom(msg.sender, address(this), _amount);
+        bool success = stakingToken.transferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
         require(success, "TF");
         balanceOf[msg.sender] += _amount;
         totalSupply += _amount;
@@ -106,11 +106,14 @@ contract StakingRewardsV2 is Ownable {
     }
 
     function getBoost(address _account) public view returns (uint256) {
-        return 100 * 1e18 + esLBRBoost.getUserBoost(
-            _account,
-            userUpdatedAt[_account],
-            finishAt
-        );
+        return
+            100 *
+            1e18 +
+            esLBRBoost.getUserBoost(
+                _account,
+                userUpdatedAt[_account],
+                finishAt
+            );
     }
 
     // Calculates and returns the earned rewards for a user
@@ -144,11 +147,9 @@ contract StakingRewardsV2 is Ownable {
     }
 
     // Allows the owner to set the mining rewards.
-    function notifyRewardAmount(uint256 _amount)
-        external
-        onlyOwner
-        updateReward(address(0))
-    {
+    function notifyRewardAmount(
+        uint256 _amount
+    ) external onlyOwner updateReward(address(0)) {
         if (block.timestamp >= finishAt) {
             rewardRate = _amount / duration;
         } else {

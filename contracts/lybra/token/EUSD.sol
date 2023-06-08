@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "../interfaces/Iconfigurator.sol";
+
 /**
  * @title Interest-bearing ERC20-like token for Lybra protocol.
  *
@@ -84,16 +85,16 @@ contract EUSD is IERC20, Context {
         uint256 sharesAmount
     );
 
-    modifier onlyMintPool() {
-        require(configurator.mintPool(msg.sender), "RCP");
+    modifier onlyMintVault() {
+        require(configurator.mintVault(msg.sender), "RCP");
         _;
     }
     modifier MintPaused() {
-        require(!configurator.poolMintPaused(msg.sender), "MPP");
+        require(!configurator.vaultMintPaused(msg.sender), "MPP");
         _;
     }
     modifier BurnPaused() {
-        require(!configurator.poolBurnPaused(msg.sender), "BPP");
+        require(!configurator.vaultBurnPaused(msg.sender), "BPP");
         _;
     }
 
@@ -188,10 +189,17 @@ contract EUSD is IERC20, Context {
      *
      * Might emit an {Approval} event.
      */
-    function _spendAllowance(address owner, address spender, uint256 amount) internal virtual {
+    function _spendAllowance(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
         if (currentAllowance != type(uint256).max) {
-            require(currentAllowance >= amount, "ERC20: insufficient allowance");
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
             unchecked {
                 _approve(owner, spender, currentAllowance - amount);
             }
@@ -243,7 +251,7 @@ contract EUSD is IERC20, Context {
         uint256 amount
     ) public returns (bool) {
         address spender = _msgSender();
-        if(!configurator.mintPool(spender)) {
+        if (!configurator.mintVault(spender)) {
             _spendAllowance(from, spender, amount);
         }
         _transfer(from, to, amount);
@@ -268,11 +276,7 @@ contract EUSD is IERC20, Context {
         uint256 _addedValue
     ) public returns (bool) {
         address owner = _msgSender();
-        _approve(
-            owner,
-            _spender,
-            allowances[owner][_spender].add(_addedValue)
-        );
+        _approve(owner, _spender, allowances[owner][_spender].add(_addedValue));
         return true;
     }
 
@@ -290,10 +294,16 @@ contract EUSD is IERC20, Context {
      * - `_spender` must have allowance for the caller of at least `_subtractedValue`.
      * - the contract must not be paused.
      */
-    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+    function decreaseAllowance(
+        address spender,
+        uint256 subtractedValue
+    ) public virtual returns (bool) {
         address owner = _msgSender();
         uint256 currentAllowance = allowance(owner, spender);
-        require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
+        require(
+            currentAllowance >= subtractedValue,
+            "ERC20: decreased allowance below zero"
+        );
         unchecked {
             _approve(owner, spender, currentAllowance - subtractedValue);
         }
@@ -458,7 +468,7 @@ contract EUSD is IERC20, Context {
     function mint(
         address _recipient,
         uint256 _mintAmount
-    ) external onlyMintPool MintPaused returns (uint256 newTotalShares) {
+    ) external onlyMintVault MintPaused returns (uint256 newTotalShares) {
         require(_recipient != address(0), "MINT_TO_THE_ZERO_ADDRESS");
 
         uint256 sharesAmount = getSharesByMintedEUSD(_mintAmount);
@@ -476,7 +486,6 @@ contract EUSD is IERC20, Context {
 
         emit Transfer(address(0), _recipient, _mintAmount);
     }
-    
 
     /**
      * @notice Destroys `sharesAmount` shares from `_account`'s holdings, decreasing the total amount of shares.
@@ -491,7 +500,7 @@ contract EUSD is IERC20, Context {
     function burn(
         address _account,
         uint256 _burnAmount
-    ) external onlyMintPool BurnPaused returns (uint256 newTotalShares) {
+    ) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
         uint256 sharesAmount = getSharesByMintedEUSD(_burnAmount);
         newTotalShares = _onlyBurnShares(_account, sharesAmount);
@@ -513,12 +522,15 @@ contract EUSD is IERC20, Context {
     function burnShares(
         address _account,
         uint256 _sharesAmount
-    ) external onlyMintPool BurnPaused returns (uint256 newTotalShares) {
+    ) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
         newTotalShares = _onlyBurnShares(_account, _sharesAmount);
     }
 
-    function _onlyBurnShares( address _account, uint256 _sharesAmount) private returns(uint256 newTotalShares){
+    function _onlyBurnShares(
+        address _account,
+        uint256 _sharesAmount
+    ) private returns (uint256 newTotalShares) {
         uint256 accountShares = shares[_account];
         require(_sharesAmount <= accountShares, "BURN_AMOUNT_EXCEEDS_BALANCE");
 
@@ -545,10 +557,5 @@ contract EUSD is IERC20, Context {
         // but we cannot reflect this as it would require sending an unbounded number of events.
 
         // We're emitting `SharesBurnt` event to provide an explicit rebase log record nonetheless.
-
     }
-
-    
-
-    
 }
