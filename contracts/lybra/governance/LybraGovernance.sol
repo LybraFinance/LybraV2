@@ -143,7 +143,7 @@ contract LybraGovernance is GovernorTimelockControl {
         override
         returns (string memory)
     {
-        return "";
+        return "support=bravo&quorum=for,abstain";
     }
 
     function clock() public view override returns (uint48) {

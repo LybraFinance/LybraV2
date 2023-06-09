@@ -70,9 +70,10 @@ abstract contract LybraEUSDVaultBase {
         bool superLiquidation,
         uint256 timestamp
     );
-    event LSDistribution(
+    event LSDValueCaptured(
         uint256 stETHAdded,
         uint256 payoutEUSD,
+        uint256 discountRate,
         uint256 timestamp
     );
     event RedemptionProvider(address user, bool status);
@@ -401,14 +402,38 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @dev Refresh LBR reward before adding providers debt. Refresh Lybra generated service fee before adding totalSupply. Check providers collateralRatio cannot below `safeCollateralRatio`after minting.
+     * @notice Mints eUSD tokens for a user.
+     * @param _provider The provider's address.
+     * @param _onBehalfOf The user's address.
+     * @param _mintAmount The amount of eUSD tokens to be minted.
+     * @param _assetPrice The current collateral asset price.
+     * @dev Mints eUSD tokens for the specified user, updates the total supply and borrowed balance,
+     * refreshes the mint reward for the provider, checks the health of the provider,
+     * and emits a Mint event.
+     * Requirements:
+     * The total supply plus mint amount must not exceed the maximum supply allowed for the vault.
+     * The provider must have sufficient borrowing capacity to mint the specified amount.
      */
     function _mintEUSD(
         address _provider,
         address _onBehalfOf,
         uint256 _mintAmount,
         uint256 _assetPrice
-    ) internal virtual;
+    ) internal virtual {
+        require(
+            poolTotalEUSDCirculation + _mintAmount <=
+                configurator.mintVaultMaxSupply(address(this)),
+            "ESL"
+        );
+        try configurator.refreshMintReward(_provider) {} catch {}
+        borrowed[_provider] += _mintAmount;
+
+        EUSD.mint(_onBehalfOf, _mintAmount);
+        _saveReport();
+        poolTotalEUSDCirculation += _mintAmount;
+        _checkHealth(_provider, _assetPrice);
+        emit Mint(msg.sender, _onBehalfOf, _mintAmount, block.timestamp);
+    }
 
     /**
      * @notice Burn _provideramount EUSD to payback minted EUSD for _onBehalfOf.
