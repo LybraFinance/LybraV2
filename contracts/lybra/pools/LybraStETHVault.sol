@@ -17,9 +17,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
     // Currently, the official rebase time for Lido is between 12PM to 13PM UTC.
     uint256 public lidoRebaseTime = 12 hours;
 
-    constructor(
-        address _config
-    ) LybraEUSDVaultBase(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84, _config) {}
+    constructor(address _config) LybraEUSDVaultBase(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84, _config) {}
 
     /**
      * @notice Sets the rebase time for Lido based on the actual situation.
@@ -40,9 +38,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
     function depositEtherToMint(uint256 mintAmount) external payable override {
         require(msg.value >= 1 ether, "DNL");
         //convert to steth
-        uint256 sharesAmount = Ilido(address(collateralAsset)).submit{
-            value: msg.value
-        }(address(configurator));
+        uint256 sharesAmount = Ilido(address(collateralAsset)).submit{value: msg.value}(address(configurator));
         require(sharesAmount > 0, "ZERO_DEPOSIT");
 
         totalDepositedAsset += msg.value;
@@ -53,13 +49,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
             _mintEUSD(msg.sender, msg.sender, mintAmount, _etherPrice());
         }
 
-        emit DepositEther(
-            msg.sender,
-            address(collateralAsset),
-            msg.value,
-            msg.value,
-            block.timestamp
-        );
+        emit DepositEther(msg.sender, address(collateralAsset), msg.value, msg.value, block.timestamp);
     }
 
     /**
@@ -71,30 +61,17 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
      * @dev Income is used to cover accumulated Service Fee first.
      */
     function excessIncomeDistribution(uint256 stETHAmount) external override {
-        require(
-            stETHAmount <=
-                collateralAsset.balanceOf(address(this)) -
-                    totalDepositedAsset &&
-                stETHAmount > 0,
-            "Only LSD excess income can be exchanged"
-        );
-        uint256 payAmount = (((stETHAmount * _etherPrice()) / 1e18) *
-            getDutchAuctionDiscountPrice()) / 10000;
+        require(stETHAmount <= collateralAsset.balanceOf(address(this)) - totalDepositedAsset &&stETHAmount > 0, "Only LSD excess income can be exchanged");
+        uint256 payAmount = (((stETHAmount * _etherPrice()) / 1e18) * getDutchAuctionDiscountPrice()) / 10000;
 
         uint256 income = feeStored + _newFee();
         if (payAmount > income) {
-            bool success = EUSD.transferFrom(
-                msg.sender,
-                address(configurator),
-                income
-            );
+            bool success = EUSD.transferFrom(msg.sender, address(configurator), income);
             require(success, "TF");
 
             try configurator.distributeDividends() {} catch {}
 
-            uint256 sharesAmount = EUSD.getSharesByMintedEUSD(
-                payAmount - income
-            );
+            uint256 sharesAmount = EUSD.getSharesByMintedEUSD(payAmount - income);
             if (sharesAmount == 0) {
                 //EUSD totalSupply is 0: assume that shares correspond to EUSD 1-to-1
                 sharesAmount = (payAmount - income);
@@ -102,35 +79,18 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
             //Income is distributed to LBR staker.
             EUSD.burnShares(msg.sender, sharesAmount);
             feeStored = 0;
-            emit FeeDistribution(
-                address(configurator),
-                income,
-                block.timestamp
-            );
+            emit FeeDistribution(address(configurator), income, block.timestamp);
         } else {
-            bool success = EUSD.transferFrom(
-                msg.sender,
-                address(configurator),
-                payAmount
-            );
+            bool success = EUSD.transferFrom(msg.sender, address(configurator), payAmount);
             require(success, "TF");
             try configurator.distributeDividends() {} catch {}
             feeStored = income - payAmount;
-            emit FeeDistribution(
-                address(configurator),
-                payAmount,
-                block.timestamp
-            );
+            emit FeeDistribution(address(configurator), payAmount, block.timestamp);
         }
 
         lastReportTime = block.timestamp;
         collateralAsset.transfer(msg.sender, stETHAmount);
-        emit LSDValueCaptured(
-            stETHAmount,
-            payAmount,
-            getDutchAuctionDiscountPrice(),
-            block.timestamp
-        );
+        emit LSDValueCaptured(stETHAmount, payAmount, getDutchAuctionDiscountPrice(), block.timestamp);
     }
 
     /**
@@ -152,7 +112,6 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
      * https://etherscan.io/address/0x4c517D4e2C851CA76d7eC94B805269Df0f2201De#code
      */
     function _etherPrice() internal returns (uint256) {
-        return
-            IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
+        return IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
     }
 }

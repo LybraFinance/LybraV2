@@ -80,7 +80,6 @@ contract EUSDMiningIncentives is Ownable {
             userRewardPerTokenPaid[_account] = rewardPerTokenStored;
             userUpdatedAt[_account] = block.timestamp;
         }
-
         _;
     }
 
@@ -147,17 +146,11 @@ contract EUSDMiningIncentives is Ownable {
 
     function stakedLBRLpValue(address user) public view returns (uint256) {
         uint256 totalLp = IEUSD(ethlbrLpToken).totalSupply();
-        uint256 lpInethlbrStakePool = IEUSD(ethlbrLpToken).balanceOf(
-            ethlbrStakePool
-        );
+        uint256 lpInethlbrStakePool = IEUSD(ethlbrLpToken).balanceOf(ethlbrStakePool);
         (, int price, , , ) = priceFeed.latestRoundData();
-        uint256 lbrInLp = (IEUSD(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2)
-            .balanceOf(ethlbrLpToken) * uint(price)) / 1e8;
+        uint256 lbrInLp = (IEUSD(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2).balanceOf(ethlbrLpToken) * uint(price)) / 1e8;
         uint256 userStaked = IEUSD(ethlbrStakePool).balanceOf(user);
-        return
-            (userStaked * lbrInLp * lpInethlbrStakePool * 2) /
-            totalLp /
-            IEUSD(ethlbrStakePool).totalSupply();
+        return (userStaked * lbrInLp * lpInethlbrStakePool * 2) / totalLp / IEUSD(ethlbrStakePool).totalSupply();
     }
 
     function lastTimeRewardApplicable() public view returns (uint256) {
@@ -169,10 +162,7 @@ contract EUSDMiningIncentives is Ownable {
             return rewardPerTokenStored;
         }
 
-        return
-            rewardPerTokenStored +
-            (rewardRatio * (lastTimeRewardApplicable() - updatedAt) * 1e18) /
-            totalStaked();
+        return rewardPerTokenStored + (rewardRatio * (lastTimeRewardApplicable() - updatedAt) * 1e18) / totalStaked();
     }
 
     /**
@@ -185,23 +175,11 @@ contract EUSDMiningIncentives is Ownable {
         if (configurator.isRedemptionProvider(_account)) {
             redemptionBoost = extraRatio;
         }
-        return
-            100 *
-            1e18 +
-            redemptionBoost +
-            esLBRBoost.getUserBoost(
-                _account,
-                userUpdatedAt[_account],
-                finishAt
-            );
+        return 100 * 1e18 + redemptionBoost + esLBRBoost.getUserBoost(_account, userUpdatedAt[_account], finishAt);
     }
 
     function earned(address _account) public view returns (uint256) {
-        return
-            ((stakedOf(_account) *
-                getBoost(_account) *
-                (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) +
-            rewards[_account];
+        return ((stakedOf(_account) * getBoost(_account) * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
     }
 
     function buyAbleByOther(address user) public view returns (bool) {
@@ -209,10 +187,7 @@ contract EUSDMiningIncentives is Ownable {
     }
 
     function getReward() external updateReward(msg.sender) {
-        require(
-            !buyAbleByOther(msg.sender),
-            "Insufficient DLP, unable to claim rewards"
-        );
+        require(!buyAbleByOther(msg.sender), "Insufficient DLP, unable to claim rewards");
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
@@ -222,10 +197,7 @@ contract EUSDMiningIncentives is Ownable {
     }
 
     function getOtherReward(address user) external updateReward(user) {
-        require(
-            buyAbleByOther(user),
-            "The rewards of the user cannot be bought out"
-        );
+        require(buyAbleByOther(user), "The rewards of the user cannot be bought out");
         uint256 reward = rewards[user];
         if (reward > 0) {
             rewards[user] = 0;
@@ -233,13 +205,7 @@ contract EUSDMiningIncentives is Ownable {
             IesLBR(LBR).burn(msg.sender, biddingFee);
             IesLBR(esLBR).mint(msg.sender, reward);
 
-            emit BuyReward(
-                msg.sender,
-                user,
-                reward,
-                biddingFee,
-                block.timestamp
-            );
+            emit BuyReward(msg.sender, user, reward, biddingFee, block.timestamp);
         }
     }
 
@@ -250,8 +216,7 @@ contract EUSDMiningIncentives is Ownable {
         if (block.timestamp >= finishAt) {
             rewardRatio = amount / duration;
         } else {
-            uint256 remainingRewards = (finishAt - block.timestamp) *
-                rewardRatio;
+            uint256 remainingRewards = (finishAt - block.timestamp) * rewardRatio;
             rewardRatio = (amount + remainingRewards) / duration;
         }
 

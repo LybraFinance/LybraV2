@@ -49,11 +49,7 @@ contract DividendPool is Ownable {
         configurator = Iconfigurator(_config);
     }
 
-    function setTokenAddress(
-        address _eslbr,
-        address _lbr,
-        address _boost
-    ) external onlyOwner {
+    function setTokenAddress(address _eslbr, address _lbr, address _boost) external onlyOwner {
         esLBR = IesLBR(_eslbr);
         LBR = IesLBR(_lbr);
         esLBRBoost = IesLBRBoost(_boost);
@@ -89,17 +85,12 @@ contract DividendPool is Ownable {
      * Resets the user's vesting data, entering a new vesting period, when converting to LBR.
      */
     function unstake(uint256 amount) external {
-        require(
-            block.timestamp >= esLBRBoost.getUnlockTime(msg.sender),
-            "Your lock-in period has not ended. You can't convert your esLBR now."
-        );
+        require(block.timestamp >= esLBRBoost.getUnlockTime(msg.sender), "Your lock-in period has not ended. You can't convert your esLBR now.");
         esLBR.burn(msg.sender, amount);
         withdraw(msg.sender);
         uint256 total = amount;
         if (time2fullRedemption[msg.sender] > block.timestamp) {
-            total +=
-                unstakeRatio[msg.sender] *
-                (time2fullRedemption[msg.sender] - block.timestamp);
+            total += unstakeRatio[msg.sender] * (time2fullRedemption[msg.sender] - block.timestamp);
         }
         unstakeRatio[msg.sender] = total / exitCycle;
         time2fullRedemption[msg.sender] = block.timestamp + exitCycle;
@@ -120,15 +111,9 @@ contract DividendPool is Ownable {
      * with the lost portion being recorded in the contract and available for others to purchase in LBR at a certain ratio.
      */
     function unlockPrematurely() external {
-        require(
-            block.timestamp + exitCycle - 3 days >
-                time2fullRedemption[msg.sender],
-            ""
-        );
-        uint256 burnAmount = getReservedLBRForVesting(msg.sender) -
-            getPreUnlockableAmount(msg.sender);
-        uint256 amount = getPreUnlockableAmount(msg.sender) +
-            getClaimAbleLBR(msg.sender);
+        require(block.timestamp + exitCycle - 3 days > time2fullRedemption[msg.sender], "ENW");
+        uint256 burnAmount = getReservedLBRForVesting(msg.sender) - getPreUnlockableAmount(msg.sender);
+        uint256 amount = getPreUnlockableAmount(msg.sender) + getClaimAbleLBR(msg.sender);
         if (amount > 0) {
             LBR.mint(msg.sender, amount);
         }
@@ -154,63 +139,37 @@ contract DividendPool is Ownable {
      * @dev Convert unredeemed and converting ESLBR tokens back to LBR.
      */
     function reStake() external {
-        uint256 amount = getReservedLBRForVesting(msg.sender) +
-            getClaimAbleLBR(msg.sender);
+        uint256 amount = getReservedLBRForVesting(msg.sender) + getClaimAbleLBR(msg.sender);
         esLBR.mint(msg.sender, amount);
         unstakeRatio[msg.sender] = 0;
         time2fullRedemption[msg.sender] = 0;
         emit Restake(msg.sender, amount, block.timestamp);
     }
 
-    function getPreUnlockableAmount(
-        address user
-    ) public view returns (uint256 amount) {
+    function getPreUnlockableAmount(address user) public view returns (uint256 amount) {
         uint256 a = getReservedLBRForVesting(user);
         if (a == 0) return 0;
-        amount =
-            (a *
-                (75e18 -
-                    ((time2fullRedemption[user] - block.timestamp) * 70e18) /
-                    (exitCycle / 1 days - 3) /
-                    1 days)) /
-            100e18;
+        amount = (a * (75e18 - ((time2fullRedemption[user] - block.timestamp) * 70e18) / (exitCycle / 1 days - 3) / 1 days)) / 100e18;
     }
 
-    function getClaimAbleLBR(
-        address user
-    ) public view returns (uint256 amount) {
+    function getClaimAbleLBR(address user) public view returns (uint256 amount) {
         if (time2fullRedemption[user] > lastWithdrawTime[user]) {
-            amount = block.timestamp > time2fullRedemption[user]
-                ? unstakeRatio[user] *
-                    (time2fullRedemption[user] - lastWithdrawTime[user])
-                : unstakeRatio[user] *
-                    (block.timestamp - lastWithdrawTime[user]);
+            amount = block.timestamp > time2fullRedemption[user] ? unstakeRatio[user] * (time2fullRedemption[user] - lastWithdrawTime[user]) : unstakeRatio[user] * (block.timestamp - lastWithdrawTime[user]);
         }
     }
 
-    function getReservedLBRForVesting(
-        address user
-    ) public view returns (uint256 amount) {
+    function getReservedLBRForVesting(address user) public view returns (uint256 amount) {
         if (time2fullRedemption[user] > block.timestamp) {
-            amount =
-                unstakeRatio[user] *
-                (time2fullRedemption[user] - block.timestamp);
+            amount = unstakeRatio[user] * (time2fullRedemption[user] - block.timestamp);
         }
     }
 
     function earned(address _account) public view returns (uint) {
-        return
-            ((stakedOf(_account) *
-                (rewardPerTokenStored - userRewardPerTokenPaid[_account])) /
-                1e18) + rewards[_account];
+        return ((stakedOf(_account) * (rewardPerTokenStored - userRewardPerTokenPaid[_account])) / 1e18) + rewards[_account];
     }
 
-    function getClaimAbleUSD(
-        address user
-    ) external view returns (uint256 amount) {
-        amount = IEUSD(configurator.getEUSDAddress()).getMintedEUSDByShares(
-            earned(user)
-        );
+    function getClaimAbleUSD(address user) external view returns (uint256 amount) {
+        amount = IEUSD(configurator.getEUSDAddress()).getMintedEUSDByShares(earned(user));
     }
 
     /**
@@ -247,11 +206,7 @@ contract DividendPool is Ownable {
         require(msg.sender == address(configurator));
         if (totalStaked() == 0) return;
         require(amount > 0, "amount = 0");
-        uint256 share = IEUSD(configurator.getEUSDAddress())
-            .getSharesByMintedEUSD(amount);
-        rewardPerTokenStored =
-            rewardPerTokenStored +
-            (share * 1e18) /
-            totalStaked();
+        uint256 share = IEUSD(configurator.getEUSDAddress()).getSharesByMintedEUSD(amount);
+        rewardPerTokenStored = rewardPerTokenStored + (share * 1e18) / totalStaked();
     }
 }

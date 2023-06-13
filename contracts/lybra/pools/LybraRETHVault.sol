@@ -21,16 +21,8 @@ interface IPriceFeed {
 contract LybraRETHVault is LybraPeUSDVaultBase {
     IRkPool rkPool = IRkPool(0xDD3f50F8A6CafbE9b31a427582963f465E745AF8);
 
-    constructor(
-        address _peusd,
-        address _config
-    )
-        LybraPeUSDVaultBase(
-            _peusd,
-            0xae78736Cd615f374D3085123A210448E74Fc6393,
-            _config
-        )
-    {}
+    constructor(address _peusd, address _config)
+        LybraPeUSDVaultBase(_peusd,0xae78736Cd615f374D3085123A210448E74Fc6393, _config) {}
 
     function depositEtherToMint(uint256 mintAmount) external payable override {
         require(msg.value >= 1 ether, "DNL");
@@ -43,13 +35,7 @@ contract LybraRETHVault is LybraPeUSDVaultBase {
             _mintPeUSD(msg.sender, msg.sender, mintAmount, getAssetPrice());
         }
 
-        emit DepositEther(
-            msg.sender,
-            address(collateralAsset),
-            msg.value,
-            balance - preBalance,
-            block.timestamp
-        );
+        emit DepositEther(msg.sender, address(collateralAsset), msg.value,balance - preBalance, block.timestamp);
     }
 
     function setRkPool(address addr) external {
@@ -58,10 +44,7 @@ contract LybraRETHVault is LybraPeUSDVaultBase {
     }
 
     function getAssetPrice() public override returns (uint256) {
-        uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De)
-            .fetchPrice();
-        return
-            (etherPrice * IRETH(address(collateralAsset)).getExchangeRatio()) /
-            1e18;
+        uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
+        return (etherPrice * IRETH(address(collateralAsset)).getExchangeRatio()) / 1e18;
     }
 }

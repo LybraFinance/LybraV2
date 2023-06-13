@@ -26,69 +26,18 @@ abstract contract LybraEUSDVaultBase {
     uint256 public feeStored;
     mapping(address => uint256) depositedTime;
 
-    event DepositEther(
-        address indexed onBehalfOf,
-        address asset,
-        uint256 etherAmount,
-        uint256 assetAmount,
-        uint256 timestamp
-    );
+    event DepositEther(address indexed onBehalfOf, address asset, uint256 etherAmount, uint256 assetAmount, uint256 timestamp);
 
-    event DepositAsset(
-        address indexed onBehalfOf,
-        address asset,
-        uint256 amount,
-        uint256 timestamp
-    );
+    event DepositAsset(address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
 
-    event WithdrawAsset(
-        address sponsor,
-        address asset,
-        address indexed onBehalfOf,
-        uint256 amount,
-        uint256 timestamp
-    );
-    event Mint(
-        address sponsor,
-        address indexed onBehalfOf,
-        uint256 amount,
-        uint256 timestamp
-    );
-    event Burn(
-        address sponsor,
-        address indexed onBehalfOf,
-        uint256 amount,
-        uint256 timestamp
-    );
-    event LiquidationRecord(
-        address provider,
-        address keeper,
-        address indexed onBehalfOf,
-        uint256 eusdamount,
-        uint256 liquidateEtherAmount,
-        uint256 keeperReward,
-        bool superLiquidation,
-        uint256 timestamp
-    );
-    event LSDValueCaptured(
-        uint256 stETHAdded,
-        uint256 payoutEUSD,
-        uint256 discountRate,
-        uint256 timestamp
-    );
+    event WithdrawAsset(address sponsor, address asset, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
+    event Mint(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
+    event Burn(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
+    event LiquidationRecord(address provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 liquidateEtherAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
+    event LSDValueCaptured(uint256 stETHAdded, uint256 payoutEUSD, uint256 discountRate, uint256 timestamp);
     event RedemptionProvider(address user, bool status);
-    event RigidRedemption(
-        address indexed caller,
-        address indexed provider,
-        uint256 eusdAmount,
-        uint256 collateralAmount,
-        uint256 timestamp
-    );
-    event FeeDistribution(
-        address indexed feeAddress,
-        uint256 feeAmount,
-        uint256 timestamp
-    );
+    event RigidRedemption(address indexed caller, address indexed provider, uint256 eusdAmount, uint256 collateralAmount, uint256 timestamp);
+    event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
 
     constructor(address _collateralAsset, address _configurator) {
         collateralAsset = IERC20(_collateralAsset);
@@ -115,20 +64,10 @@ abstract contract LybraEUSDVaultBase {
      * - `assetAmount` Must be higher than 0.
      * - `mintAmount` Send 0 if doesn't mint EUSD
      */
-    function depositAssetToMint(
-        uint256 assetAmount,
-        uint256 mintAmount
-    ) external virtual {
-        require(
-            assetAmount >= 1 ether,
-            "Deposit should not be less than 1 stETH."
-        );
+    function depositAssetToMint(uint256 assetAmount, uint256 mintAmount) external virtual {
+        require(assetAmount >= 1 ether, "Deposit should not be less than 1 stETH.");
 
-        bool success = collateralAsset.transferFrom(
-            msg.sender,
-            address(this),
-            assetAmount
-        );
+        bool success = collateralAsset.transferFrom(msg.sender, address(this), assetAmount);
         require(success, "TF");
 
         totalDepositedAsset += assetAmount;
@@ -138,12 +77,7 @@ abstract contract LybraEUSDVaultBase {
         if (mintAmount > 0) {
             _mintEUSD(msg.sender, msg.sender, mintAmount, getAssetPrice());
         }
-        emit DepositAsset(
-            msg.sender,
-            address(collateralAsset),
-            assetAmount,
-            block.timestamp
-        );
+        emit DepositAsset(msg.sender, address(collateralAsset), assetAmount, block.timestamp);
     }
 
     /**
@@ -159,10 +93,7 @@ abstract contract LybraEUSDVaultBase {
     function withdraw(address onBehalfOf, uint256 amount) external virtual {
         require(onBehalfOf != address(0), "TZA");
         require(amount > 0, "ZERO_WITHDRAW");
-        require(
-            depositedAsset[msg.sender] >= amount,
-            "Withdraw amount exceeds deposited amount."
-        );
+        require(depositedAsset[msg.sender] >= amount, "Withdraw amount exceeds deposited amount.");
         totalDepositedAsset -= amount;
         depositedAsset[msg.sender] -= amount;
 
@@ -172,22 +103,11 @@ abstract contract LybraEUSDVaultBase {
         if (borrowed[msg.sender] > 0) {
             _checkHealth(msg.sender, getAssetPrice());
         }
-        emit WithdrawAsset(
-            msg.sender,
-            address(collateralAsset),
-            onBehalfOf,
-            withdrawal,
-            block.timestamp
-        );
+        emit WithdrawAsset(msg.sender, address(collateralAsset), onBehalfOf, withdrawal, block.timestamp);
     }
 
-    function checkWithdrawal(
-        address user,
-        uint256 amount
-    ) internal view returns (uint256 withdrawal) {
-        withdrawal = block.timestamp - 3 days >= depositedTime[user]
-            ? amount
-            : (amount * 999) / 1000;
+    function checkWithdrawal(address user, uint256 amount) internal view returns (uint256 withdrawal) {
+        withdrawal = block.timestamp - 3 days >= depositedTime[user] ? amount : (amount * 999) / 1000;
     }
 
     /**
@@ -226,28 +146,13 @@ abstract contract LybraEUSDVaultBase {
      * - provider should authorize Lybra to utilize EUSD
      * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, collateral is reduced by the collateralAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
      */
-    function liquidation(
-        address provider,
-        address onBehalfOf,
-        uint256 assetAmount
-    ) external virtual {
+    function liquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
         uint256 assetPrice = getAssetPrice();
-        uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] *
-            assetPrice *
-            100) / borrowed[onBehalfOf];
-        require(
-            onBehalfOfCollateralRatio < badCollateralRatio,
-            "Borrowers collateral ratio should below badCollateralRatio"
-        );
+        uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] * assetPrice * 100) / borrowed[onBehalfOf];
+        require(onBehalfOfCollateralRatio < badCollateralRatio, "Borrowers collateral ratio should below badCollateralRatio");
 
-        require(
-            assetAmount * 2 <= depositedAsset[onBehalfOf],
-            "a max of 50% collateral can be liquidated"
-        );
-        require(
-            EUSD.allowance(provider, address(this)) > 0,
-            "provider should authorize to provide liquidation EUSD"
-        );
+        require(assetAmount * 2 <= depositedAsset[onBehalfOf], "a max of 50% collateral can be liquidated");
+        require(EUSD.allowance(provider, address(this)) > 0, "provider should authorize to provide liquidation EUSD");
         uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, eusdAmount);
@@ -258,22 +163,11 @@ abstract contract LybraEUSDVaultBase {
         if (provider == msg.sender) {
             collateralAsset.transfer(msg.sender, reducedAsset);
         } else {
-            reward2keeper =
-                (reducedAsset * configurator.vaultKeeperRatio(address(this))) /
-                110;
+            reward2keeper = (reducedAsset * configurator.vaultKeeperRatio(address(this))) / 110;
             collateralAsset.transfer(provider, reducedAsset - reward2keeper);
             collateralAsset.transfer(msg.sender, reward2keeper);
         }
-        emit LiquidationRecord(
-            provider,
-            msg.sender,
-            onBehalfOf,
-            eusdAmount,
-            reducedAsset,
-            reward2keeper,
-            false,
-            block.timestamp
-        );
+        emit LiquidationRecord(provider, msg.sender, onBehalfOf, eusdAmount, reducedAsset, reward2keeper, false, block.timestamp);
     }
 
     /**
@@ -285,66 +179,30 @@ abstract contract LybraEUSDVaultBase {
      * - `onBehalfOf`collateralRatio should be below 125%
      * @dev After Liquidation, borrower's debt is reduced by collateralAmount * etherPrice, deposit is reduced by collateralAmount * borrower's collateralRatio. Keeper gets a liquidation reward of `keeperRatio / borrower's collateralRatio
      */
-    function superLiquidation(
-        address provider,
-        address onBehalfOf,
-        uint256 assetAmount
-    ) external virtual {
+    function superLiquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
         uint256 assetPrice = getAssetPrice();
-        require(
-            (totalDepositedAsset * assetPrice * 100) /
-                poolTotalEUSDCirculation <
-                badCollateralRatio,
-            "overallCollateralRatio should below 150%"
-        );
-        uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] *
-            assetPrice *
-            100) / borrowed[onBehalfOf];
-        require(
-            onBehalfOfCollateralRatio < 125 * 1e18,
-            "borrowers collateralRatio should below 125%"
-        );
-        require(
-            assetAmount <= depositedAsset[onBehalfOf],
-            "total of collateral can be liquidated at most"
-        );
+        require((totalDepositedAsset * assetPrice * 100) / poolTotalEUSDCirculation < badCollateralRatio, "overallCollateralRatio should below 150%");
+        uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] * assetPrice * 100) / borrowed[onBehalfOf];
+        require(onBehalfOfCollateralRatio < 125 * 1e18, "borrowers collateralRatio should below 125%");
+        require(assetAmount <= depositedAsset[onBehalfOf], "total of collateral can be liquidated at most");
         uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
         if (onBehalfOfCollateralRatio >= 1e20) {
             eusdAmount = (eusdAmount * 1e20) / onBehalfOfCollateralRatio;
         }
-        require(
-            EUSD.allowance(provider, address(this)) >= eusdAmount,
-            "provider should authorize to provide liquidation EUSD"
-        );
+        require(EUSD.allowance(provider, address(this)) >= eusdAmount, "provider should authorize to provide liquidation EUSD");
 
         _repay(provider, onBehalfOf, eusdAmount);
 
         totalDepositedAsset -= assetAmount;
         depositedAsset[onBehalfOf] -= assetAmount;
         uint256 reward2keeper;
-        if (
-            msg.sender != provider &&
-            onBehalfOfCollateralRatio >=
-            1e20 + configurator.vaultKeeperRatio(address(this)) * 1e18
-        ) {
-            reward2keeper =
-                ((assetAmount * configurator.vaultKeeperRatio(address(this))) *
-                    1e18) /
-                onBehalfOfCollateralRatio;
+        if (msg.sender != provider && onBehalfOfCollateralRatio >= 1e20 + configurator.vaultKeeperRatio(address(this)) * 1e18) {
+            reward2keeper = ((assetAmount * configurator.vaultKeeperRatio(address(this))) * 1e18) / onBehalfOfCollateralRatio;
             collateralAsset.transfer(msg.sender, reward2keeper);
         }
         collateralAsset.transfer(provider, assetAmount - reward2keeper);
 
-        emit LiquidationRecord(
-            provider,
-            msg.sender,
-            onBehalfOf,
-            eusdAmount,
-            assetAmount,
-            reward2keeper,
-            true,
-            block.timestamp
-        );
+        emit LiquidationRecord(provider, msg.sender, onBehalfOf, eusdAmount, assetAmount, reward2keeper, true, block.timestamp);
     }
 
     /**
@@ -366,39 +224,18 @@ abstract contract LybraEUSDVaultBase {
      * - `provider`debt must equal to or above`eusdAmount`
      * @dev Service Fee for rigidRedemption `redemptionFee` is set to 0.5% by default, can be revised by DAO.
      */
-    function rigidRedemption(
-        address provider,
-        uint256 eusdAmount
-    ) external virtual {
-        require(
-            configurator.isRedemptionProvider(provider),
-            "provider is not a RedemptionProvider"
-        );
-        require(
-            borrowed[provider] >= eusdAmount,
-            "eusdAmount cannot surpass providers debt"
-        );
+    function rigidRedemption(address provider, uint256 eusdAmount) external virtual {
+        require(configurator.isRedemptionProvider(provider), "provider is not a RedemptionProvider");
+        require(borrowed[provider] >= eusdAmount, "eusdAmount cannot surpass providers debt");
         uint256 assetPrice = getAssetPrice();
-        uint256 providerCollateralRatio = (depositedAsset[provider] *
-            assetPrice *
-            100) / borrowed[provider];
-        require(
-            providerCollateralRatio >= 100 * 1e18,
-            "provider's collateral ratio should more than 100%"
-        );
+        uint256 providerCollateralRatio = (depositedAsset[provider] * assetPrice * 100) / borrowed[provider];
+        require(providerCollateralRatio >= 100 * 1e18, "provider's collateral ratio should more than 100%");
         _repay(msg.sender, provider, eusdAmount);
-        uint256 collateralAmount = (((eusdAmount * 1e18) / assetPrice) *
-            (10000 - configurator.redemptionFee())) / 10000;
+        uint256 collateralAmount = (((eusdAmount * 1e18) / assetPrice) * (10000 - configurator.redemptionFee())) / 10000;
         depositedAsset[provider] -= collateralAmount;
         totalDepositedAsset -= collateralAmount;
         collateralAsset.transfer(msg.sender, collateralAmount);
-        emit RigidRedemption(
-            msg.sender,
-            provider,
-            eusdAmount,
-            collateralAmount,
-            block.timestamp
-        );
+        emit RigidRedemption(msg.sender, provider, eusdAmount, collateralAmount, block.timestamp);
     }
 
     /**
@@ -414,17 +251,8 @@ abstract contract LybraEUSDVaultBase {
      * The total supply plus mint amount must not exceed the maximum supply allowed for the vault.
      * The provider must have sufficient borrowing capacity to mint the specified amount.
      */
-    function _mintEUSD(
-        address _provider,
-        address _onBehalfOf,
-        uint256 _mintAmount,
-        uint256 _assetPrice
-    ) internal virtual {
-        require(
-            poolTotalEUSDCirculation + _mintAmount <=
-                configurator.mintVaultMaxSupply(address(this)),
-            "ESL"
-        );
+    function _mintEUSD(address _provider, address _onBehalfOf, uint256 _mintAmount, uint256 _assetPrice) internal virtual {
+        require(poolTotalEUSDCirculation + _mintAmount <= configurator.mintVaultMaxSupply(address(this)), "ESL");
         try configurator.refreshMintReward(_provider) {} catch {}
         borrowed[_provider] += _mintAmount;
 
@@ -440,14 +268,8 @@ abstract contract LybraEUSDVaultBase {
      *
      * @dev Refresh LBR reward before reducing providers debt. Refresh Lybra generated service fee before reducing totalEUSDCirculation.
      */
-    function _repay(
-        address _provider,
-        address _onBehalfOf,
-        uint256 _amount
-    ) internal virtual {
-        uint256 amount = borrowed[_onBehalfOf] >= _amount
-            ? _amount
-            : borrowed[_onBehalfOf];
+    function _repay(address _provider, address _onBehalfOf, uint256 _amount) internal virtual {
+        uint256 amount = borrowed[_onBehalfOf] >= _amount ? _amount : borrowed[_onBehalfOf];
 
         EUSD.burn(_provider, amount);
         try configurator.refreshMintReward(_onBehalfOf) {} catch {}
@@ -462,10 +284,7 @@ abstract contract LybraEUSDVaultBase {
      * @dev Get USD value of current collateral asset and minted EUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
      */
     function _checkHealth(address _user, uint256 _assetPrice) internal view {
-        if (
-            ((depositedAsset[_user] * _assetPrice * 100) / borrowed[_user]) <
-            configurator.getSafeCollateralRatio(address(this))
-        ) revert("collateralRatio is Below safeCollateralRatio");
+        if (((depositedAsset[_user] * _assetPrice * 100) / borrowed[_user]) < configurator.getSafeCollateralRatio(address(this))) revert("collateralRatio is Below safeCollateralRatio");
     }
 
     function _saveReport() internal {
@@ -474,12 +293,7 @@ abstract contract LybraEUSDVaultBase {
     }
 
     function _newFee() internal view returns (uint256) {
-        return
-            (poolTotalEUSDCirculation *
-                configurator.vaultMintFeeApy(address(this)) *
-                (block.timestamp - lastReportTime)) /
-            (86400 * 365) /
-            10000;
+        return (poolTotalEUSDCirculation * configurator.vaultMintFeeApy(address(this)) * (block.timestamp - lastReportTime)) / (86400 * 365) / 10000;
     }
 
     function getBorrowedOf(address user) external view returns (uint256) {

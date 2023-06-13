@@ -30,9 +30,7 @@ contract esLBRBoost is Ownable {
     }
 
     // Function to add a new lock setting
-    function addLockSetting(
-        esLBRLockSetting memory setting
-    ) external onlyOwner {
+    function addLockSetting(esLBRLockSetting memory setting) external onlyOwner {
         esLBRLockSettings.push(setting);
     }
 
@@ -41,22 +39,13 @@ contract esLBRBoost is Ownable {
         esLBRLockSetting memory _setting = esLBRLockSettings[id];
         LockStatus memory userStatus = userLockStatus[msg.sender];
         if (userStatus.unlockTime > block.timestamp) {
-            require(
-                userStatus.duration <= _setting.duration,
-                "Your lock-in period has not ended, and the term can only be extended, not reduced."
-            );
+            require(userStatus.duration <= _setting.duration, "Your lock-in period has not ended, and the term can only be extended, not reduced.");
         }
-        userLockStatus[msg.sender] = LockStatus(
-            block.timestamp + _setting.duration,
-            _setting.duration,
-            _setting.miningBoost
-        );
+        userLockStatus[msg.sender] = LockStatus(block.timestamp + _setting.duration, _setting.duration, _setting.miningBoost);
     }
 
     // Function to get the user's unlock time
-    function getUnlockTime(
-        address user
-    ) external view returns (uint256 unlockTime) {
+    function getUnlockTime(address user) external view returns (uint256 unlockTime) {
         unlockTime = userLockStatus[user].unlockTime;
     }
 
@@ -65,11 +54,7 @@ contract esLBRBoost is Ownable {
      * @dev Based on the user's userUpdatedAt time, finishAt time, and the current time,
      * there are several scenarios that could occur, including no acceleration, full acceleration, and partial acceleration.
      */
-    function getUserBoost(
-        address user,
-        uint256 userUpdatedAt,
-        uint256 finishAt
-    ) external view returns (uint256) {
+    function getUserBoost(address user, uint256 userUpdatedAt, uint256 finishAt) external view returns (uint256) {
         uint256 boostEndTime = userLockStatus[user].unlockTime;
         uint256 maxBoost = userLockStatus[user].miningBoost;
         if (userUpdatedAt >= boostEndTime || userUpdatedAt >= finishAt) {
@@ -78,12 +63,8 @@ contract esLBRBoost is Ownable {
         if (finishAt <= boostEndTime || block.timestamp <= boostEndTime) {
             return maxBoost;
         } else {
-            uint256 time = block.timestamp > finishAt
-                ? finishAt
-                : block.timestamp;
-            return
-                ((boostEndTime - userUpdatedAt) * maxBoost) /
-                (time - userUpdatedAt);
+            uint256 time = block.timestamp > finishAt ? finishAt : block.timestamp;
+            return ((boostEndTime - userUpdatedAt) * maxBoost) / (time - userUpdatedAt);
         }
     }
 }

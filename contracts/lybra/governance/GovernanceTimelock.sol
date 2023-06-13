@@ -10,13 +10,7 @@ contract GovernanceTimelock is TimelockController {
     bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
     bytes32 public constant ADMIN = keccak256("ADMIN");
 
-    constructor(
-        uint256 minDelay,
-        address[] memory proposers,
-        address[] memory executors,
-        address admin,
-        address _dao
-    ) TimelockController(minDelay, proposers, executors, admin) {
+    constructor(uint256 minDelay, address[] memory proposers, address[] memory executors, address admin, address _dao) TimelockController(minDelay, proposers, executors, admin) {
         _setRoleAdmin(DAO, DAO);
         _setRoleAdmin(TIMELOCK, DAO);
         _setRoleAdmin(ADMIN, DAO);
@@ -24,17 +18,11 @@ contract GovernanceTimelock is TimelockController {
         _grantRole(DAO, msg.sender);
     }
 
-    function checkRole(
-        bytes32 role,
-        address _sender
-    ) public view returns (bool) {
+    function checkRole(bytes32 role, address _sender) public view returns (bool) {
         return hasRole(role, _sender) || hasRole(DAO, _sender);
     }
 
-    function checkOnlyRole(
-        bytes32 role,
-        address _sender
-    ) public view returns (bool) {
+    function checkOnlyRole(bytes32 role, address _sender) public view returns (bool) {
         return hasRole(role, _sender);
     }
 }

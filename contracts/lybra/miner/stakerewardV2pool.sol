@@ -76,20 +76,13 @@ contract StakingRewardsV2 is Ownable {
             return rewardPerTokenStored;
         }
 
-        return
-            rewardPerTokenStored +
-            (rewardRatio * (lastTimeRewardApplicable() - updatedAt) * 1e18) /
-            totalSupply;
+        return rewardPerTokenStored + (rewardRatio * (lastTimeRewardApplicable() - updatedAt) * 1e18) / totalSupply;
     }
 
     // Allows users to stake a specified amount of tokens
     function stake(uint256 _amount) external updateReward(msg.sender) {
         require(_amount > 0, "amount = 0");
-        bool success = stakingToken.transferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
+        bool success = stakingToken.transferFrom(msg.sender, address(this), _amount);
         require(success, "TF");
         balanceOf[msg.sender] += _amount;
         totalSupply += _amount;
@@ -106,23 +99,12 @@ contract StakingRewardsV2 is Ownable {
     }
 
     function getBoost(address _account) public view returns (uint256) {
-        return
-            100 *
-            1e18 +
-            esLBRBoost.getUserBoost(
-                _account,
-                userUpdatedAt[_account],
-                finishAt
-            );
+        return 100 * 1e18 + esLBRBoost.getUserBoost(_account, userUpdatedAt[_account], finishAt);
     }
 
     // Calculates and returns the earned rewards for a user
     function earned(address _account) public view returns (uint256) {
-        return
-            ((balanceOf[_account] *
-                getBoost(_account) *
-                (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) +
-            rewards[_account];
+        return ((balanceOf[_account] * getBoost(_account) * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
     }
 
     // Allows users to claim their earned rewards
@@ -147,14 +129,11 @@ contract StakingRewardsV2 is Ownable {
     }
 
     // Allows the owner to set the mining rewards.
-    function notifyRewardAmount(
-        uint256 _amount
-    ) external onlyOwner updateReward(address(0)) {
+    function notifyRewardAmount(uint256 _amount) external onlyOwner updateReward(address(0)) {
         if (block.timestamp >= finishAt) {
             rewardRatio = _amount / duration;
         } else {
-            uint256 remainingRewards = (finishAt - block.timestamp) *
-                rewardRatio;
+            uint256 remainingRewards = (finishAt - block.timestamp) * rewardRatio;
             rewardRatio = (_amount + remainingRewards) / duration;
         }
 

@@ -6,9 +6,5 @@ import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.so
 
 
 contract LybraProxy is TransparentUpgradeableProxy {
-    constructor(
-        address _logic,
-        address _admin,
-        bytes memory _data
-    ) TransparentUpgradeableProxy(_logic, _admin, _data) {}
+    constructor(address _logic,address _admin,bytes memory _data) TransparentUpgradeableProxy(_logic, _admin, _data) {}
 }

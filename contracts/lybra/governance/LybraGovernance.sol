@@ -26,13 +26,7 @@ contract LybraGovernance is GovernorTimelockControl {
 
     mapping(uint256 => ProposalExtraData) proposalData;
 
-    // TimelockController timelockAddress;
-    constructor(
-        string memory name_,
-        TimelockController timelock_,
-        address _esLBR
-    ) GovernorTimelockControl(timelock_) Governor(name_) {
-        // timelock = timelock_;
+    constructor(string memory name_, TimelockController timelock_, address _esLBR) GovernorTimelockControl(timelock_) Governor(name_) {
         esLBR = IesLBR(_esLBR);
     }
 
@@ -50,20 +44,14 @@ contract LybraGovernance is GovernorTimelockControl {
     /**
      * @dev Amount of votes already cast passes the threshold limit.
      */
-    function _quorumReached(
-        uint256 proposalId
-    ) internal view override returns (bool) {
-        return
-            proposalData[proposalId].totalVotes >=
-            quorum(proposalSnapshot(proposalId));
+    function _quorumReached(uint256 proposalId) internal view override returns (bool) {
+        return proposalData[proposalId].totalVotes >= quorum(proposalSnapshot(proposalId));
     }
 
     /**
      * @dev Is the proposal successful or not.
      */
-    function _voteSucceeded(
-        uint256 proposalId
-    ) internal view override returns (bool) {
+    function _voteSucceeded(uint256 proposalId) internal view override returns (bool) {
         return state(proposalId) == ProposalState.Succeeded;
     }
 
@@ -73,30 +61,13 @@ contract LybraGovernance is GovernorTimelockControl {
      * Note: Support is generic and can represent various things depending on the voting system used.
      */
 
-    function _countVote(
-        uint256 proposalId,
-        address account,
-        uint8 support,
-        uint256 weight,
-        bytes memory
-    ) internal override {
-        require(
-            state(proposalId) == ProposalState.Active,
-            "GovernorBravo::castVoteInternal: voting is closed"
-        );
-        require(
-            support <= 2,
-            "GovernorBravo::castVoteInternal: invalid vote type"
-        );
+    function _countVote(uint256 proposalId, address account, uint8 support, uint256 weight, bytes memory) internal override {
+        require(state(proposalId) == ProposalState.Active, "GovernorBravo::castVoteInternal: voting is closed");
+        require(support <= 2, "GovernorBravo::castVoteInternal: invalid vote type");
         ProposalExtraData storage proposalExtraData = proposalData[proposalId];
         Receipt storage receipt = proposalExtraData.receipts[account];
-        require(
-            receipt.hasVoted == false,
-            "GovernorBravo::castVoteInternal: voter already voted"
-        );
-
+        require(receipt.hasVoted == false, "GovernorBravo::castVoteInternal: voter already voted");
         proposalExtraData.supportVotes[support] += weight;
-
         receipt.hasVoted = true;
         receipt.support = support;
         receipt.votes = weight;
@@ -107,11 +78,7 @@ contract LybraGovernance is GovernorTimelockControl {
      * @dev Get the voting weight of `account` at a specific `timepoint`, for a vote as described by `params`.
      */
 
-    function _getVotes(
-        address account,
-        uint256 timepoint,
-        bytes memory
-    ) internal view override returns (uint256) {
+    function _getVotes(address account, uint256 timepoint, bytes memory) internal view override returns (uint256) {
         return esLBR.getPastVotes(account, timepoint);
     }
 
@@ -136,24 +103,16 @@ contract LybraGovernance is GovernorTimelockControl {
         return "mode=blocknumber&from=default";
     }
 
-    function COUNTING_MODE()
-        public
-        view
-        virtual
-        override
-        returns (string memory)
+    function COUNTING_MODE() public view virtual override returns (string memory)
     {
-        return "support=bravo&quorum=for,abstain";
+        return "";
     }
 
     function clock() public view override returns (uint48) {
         return SafeCast.toUint48(block.number);
     }
 
-    function hasVoted(
-        uint256 proposalId,
-        address account
-    ) public view virtual override returns (bool) {
+    function hasVoted(uint256 proposalId, address account) public view virtual override returns (bool) {
         return proposalData[proposalId].receipts[account].hasVoted;
     }
 
@@ -167,34 +126,14 @@ contract LybraGovernance is GovernorTimelockControl {
     /**
      * @dev See {IERC165-supportsInterface}.
      */
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(GovernorTimelockControl) returns (bool) {
-        bytes4 governorCancelId = this.cancel.selector ^
-            this.proposalProposer.selector;
-
-        bytes4 governorParamsId = this.castVoteWithReasonAndParams.selector ^
-            this.castVoteWithReasonAndParamsBySig.selector ^
-            this.getVotesWithParams.selector;
-
+    function supportsInterface(bytes4 interfaceId) public view virtual override(GovernorTimelockControl) returns (bool) {
+        bytes4 governorCancelId = this.cancel.selector ^ this.proposalProposer.selector;
+        bytes4 governorParamsId = this.castVoteWithReasonAndParams.selector ^ this.castVoteWithReasonAndParamsBySig.selector ^ this.getVotesWithParams.selector;
         // The original interface id in v4.3.
-        bytes4 governor43Id = type(IGovernor).interfaceId ^
-            type(IERC6372).interfaceId ^
-            governorCancelId ^
-            governorParamsId;
-
+        bytes4 governor43Id = type(IGovernor).interfaceId ^ type(IERC6372).interfaceId ^ governorCancelId ^ governorParamsId;
         // An updated interface id in v4.6, with params added.
-        bytes4 governor46Id = type(IGovernor).interfaceId ^
-            type(IERC6372).interfaceId ^
-            governorCancelId;
-
+        bytes4 governor46Id = type(IGovernor).interfaceId ^ type(IERC6372).interfaceId ^ governorCancelId;
         // For the updated interface id in v4.9, we use governorCancelId directly.
-
-        return
-            interfaceId == governor43Id ||
-            interfaceId == governor46Id ||
-            interfaceId == governorCancelId ||
-            interfaceId == type(IERC1155Receiver).interfaceId ||
-            super.supportsInterface(interfaceId);
+        return interfaceId == governor43Id || interfaceId == governor46Id || interfaceId == governorCancelId || interfaceId == type(IERC1155Receiver).interfaceId || super.supportsInterface(interfaceId);
     }
 }

@@ -108,24 +108,15 @@ contract Configurator {
      * @param maxSupply The maximum amount of eUSD that can be minted for the asset pool.
      * @dev This function can only be called by the DAO.
      */
-    function setmintVaultMaxSupply(
-        address pool,
-        uint256 maxSupply
-    ) external onlyRole(DAO) {
+    function setmintVaultMaxSupply(address pool, uint256 maxSupply) external onlyRole(DAO) {
         mintVaultMaxSupply[pool] = maxSupply;
     }
 
     /**
      * @notice  badCollateralRatio can be decided by DAO,starts at 120%
      */
-    function setBadCollateralRatio(
-        address pool,
-        uint256 newRatio
-    ) external onlyRole(DAO) {
-        require(
-            newRatio >= 120 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] + 1e19,
-            "Safe CollateralRatio should more than 160%"
-        );
+    function setBadCollateralRatio(address pool, uint256 newRatio) external onlyRole(DAO) {
+        require(newRatio >= 120 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] + 1e19, "Safe CollateralRatio should more than 160%");
         vaultBadCollateralRatio[pool] = newRatio;
         emit SafeCollateralRatioChanged(pool, newRatio);
     }
@@ -145,9 +136,7 @@ contract Configurator {
      * @param addr The new address of the eUSDMiningIncentives pool.
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
      */
-    function setEUSDMiningIncentives(
-        address addr
-    ) external checkRole(TIMELOCK) {
+    function setEUSDMiningIncentives(address addr) external checkRole(TIMELOCK) {
         eUSDMiningIncentives = IeUSDMiningIncentives(addr);
         emit EUSDMiningIncentivesChanged(addr, block.timestamp);
     }
@@ -158,10 +147,7 @@ contract Configurator {
      * @param isActive Boolean value indicating whether repayment is active or paused.
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
      */
-    function setvaultBurnPaused(
-        address pool,
-        bool isActive
-    ) external checkRole(TIMELOCK) {
+    function setvaultBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK) {
         vaultBurnPaused[pool] = isActive;
     }
 
@@ -171,10 +157,7 @@ contract Configurator {
      * @param isActive Boolean value indicating whether minting is active or paused.
      * @dev This function can only be called by accounts with ADMIN or higher privilege.
      */
-    function setvaultMintPaused(
-        address pool,
-        bool isActive
-    ) external checkRole(ADMIN) {
+    function setvaultMintPaused(address pool, bool isActive) external checkRole(ADMIN) {
         vaultMintPaused[pool] = isActive;
     }
 
@@ -195,20 +178,11 @@ contract Configurator {
      * On the other hand, the PeUSD vault requires a safe collateral rate at least 10% higher
      * than the liquidation collateral rate, providing an additional buffer to protect against liquidation risks.
      */
-    function setSafeCollateralRatio(
-        address pool,
-        uint256 newRatio
-    ) external checkRole(TIMELOCK) {
+    function setSafeCollateralRatio(address pool, uint256 newRatio) external checkRole(TIMELOCK) {
         if(IVault(pool).vaultType() == 0) {
-            require(
-                newRatio >= 160 * 1e18,
-                "eUSD vault safe collateralRatio should more than 160%"
-            );
+            require(newRatio >= 160 * 1e18, "eUSD vault safe collateralRatio should more than 160%");
         } else {
-            require(
-                newRatio >= vaultBadCollateralRatio[pool] + 1e19,
-                "PeUSD vault safe collateralRatio should more than bad collateralRatio"
-            );
+            require(newRatio >= vaultBadCollateralRatio[pool] + 1e19, "PeUSD vault safe collateralRatio should more than bad collateralRatio");
         }
         vaultSafeCollateralRatio[pool] = newRatio;
         emit SafeCollateralRatioChanged(pool, newRatio);
@@ -219,10 +193,7 @@ contract Configurator {
      * @param pool The address of the pool to set the borrowing APY for.
      * @param newApy The new borrowing APY to set, limited to a maximum of 2%.
      */
-    function setBorrowApy(
-        address pool,
-        uint256 newApy
-    ) external checkRole(TIMELOCK) {
+    function setBorrowApy(address pool, uint256 newApy) external checkRole(TIMELOCK) {
         require(newApy <= 200, "Borrow APY cannot exceed 2%");
         vaultMintFeeApy[pool] = newApy;
         emit BorrowApyChanged(pool, newApy);
@@ -233,10 +204,7 @@ contract Configurator {
      * @param pool The address of the pool to set the reward ratio for.
      * @param newRatio The new reward ratio to set, limited to a maximum of 5%.
      */
-    function setKeeperRatio(
-        address pool,
-        uint256 newRatio
-    ) external checkRole(TIMELOCK) {
+    function setKeeperRatio(address pool,uint256 newRatio) external checkRole(TIMELOCK) {
         require(newRatio <= 5, "Max Keeper reward is 5%");
         vaultKeeperRatio[pool] = newRatio;
         emit KeeperRatioChanged(pool, newRatio);
@@ -247,10 +215,7 @@ contract Configurator {
      * @param _contracts An array of addresses representing the contracts.
      * @param _bools An array of booleans indicating whether mining is allowed for each contract.
      */
-    function setTokenMiner(
-        address[] calldata _contracts,
-        bool[] calldata _bools
-    ) external checkRole(TIMELOCK) {
+    function setTokenMiner(address[] calldata _contracts, bool[] calldata _bools) external checkRole(TIMELOCK) {
         for (uint256 i = 0; i < _contracts.length; i++) {
             tokenMiner[_contracts[i]] = _bools[i];
             emit tokenMinerChanges(_contracts[i], _bools[i]);
@@ -345,17 +310,14 @@ contract Configurator {
     }
 
     /**
-     * @dev Returns the maximum supply of PeUSD based on the eUSD total supply and the maximum stable ratio.
-     * @return The maximum supply of PeUSD.
+     * @dev Return the maximum quantity of PeUSD that can be minted by using eUSD.
+     * @return The maximum quantity of PeUSD that can be minted through eUSD.
      */
     function getPeUSDMaxSupply() external view returns (uint256) {
         return (EUSD.totalSupply() * maxStableRatio) / 10_000;
     }
 
-    function hasRole(
-        bytes32 role,
-        address caller
-    ) external view returns (bool) {
+    function hasRole(bytes32 role, address caller) external view returns (bool) {
         return GovernanceTimelock.checkOnlyRole(role, caller);
     }
 }
