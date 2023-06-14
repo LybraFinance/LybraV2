@@ -6,12 +6,17 @@ import "../../interfaces/Iconfigurator.sol";
 import "../../interfaces/IPeUSD.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+interface IPriceFeed {
+    function fetchPrice() external returns (uint256);
+}
+
 abstract contract LybraPeUSDVaultBase {
     IPeUSD public immutable PeUSD;
     IERC20 public immutable collateralAsset;
     Iconfigurator public immutable configurator;
     uint256 public poolTotalPeUSDCirculation;
     uint8 immutable vaultType = 1;
+    IPriceFeed immutable etherOracle;
 
     mapping(address => uint256) public depositedAsset;
     mapping(address => uint256) borrowed;
@@ -30,10 +35,11 @@ abstract contract LybraPeUSDVaultBase {
     event RigidRedemption(address indexed caller, address indexed provider, uint256 peusdAmount, uint256 assetAmount, uint256 timestamp);
     event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
 
-    constructor(address _peusd, address _collateral, address _configurator) {
+    constructor(address _peusd, address _etherOracle, address _collateral, address _configurator) {
         PeUSD = IPeUSD(_peusd);
         collateralAsset = IERC20(_collateral);
         configurator = Iconfigurator(_configurator);
+        etherOracle = IPriceFeed(_etherOracle);
     }
 
     function totalDepositedAsset() public view returns (uint256) {
@@ -217,7 +223,7 @@ abstract contract LybraPeUSDVaultBase {
         uint256 totalFee = feeStored[_onBehalfOf] + _newFee(_onBehalfOf);
         if (_amount >= totalFee) {
             feeStored[_onBehalfOf] = 0;
-            bool success = IERC20(configurator.getEUSDAddress()).transferFrom(_provider, address(configurator), totalFe);
+            bool success = IERC20(configurator.getEUSDAddress()).transferFrom(_provider, address(configurator), totalFee);
             require(success, "TF");
         } else {
             feeStored[_onBehalfOf] = totalFee - _amount;
@@ -256,6 +262,13 @@ abstract contract LybraPeUSDVaultBase {
 
     function _newFee(address user) internal view returns (uint256) {
         return (borrowed[user] * configurator.vaultMintFeeApy(address(this)) * (block.timestamp - feeUpdatedAt[user])) / (86400 * 365) / 10000;
+    }
+
+    /**
+     * @dev Return USD value of current ETH through Liquity PriceFeed Contract.
+     */
+    function _etherPrice() internal returns (uint256) {
+        return etherOracle.fetchPrice();
     }
 
     /**

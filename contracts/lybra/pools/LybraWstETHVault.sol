@@ -18,16 +18,16 @@ interface Ilido {
     function approve(address spender, uint256 amount) external returns (bool);
 }
 
-interface IPriceFeed {
-    function fetchPrice() external returns (uint256);
-}
-
 contract LybraWstETHVault is LybraPeUSDVaultBase {
-    constructor(address _peusd, address _config) LybraPeUSDVaultBase(_peusd, 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0, _config) {}
+    Ilido immutable lido;
+    //WstETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    //Lido = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
+    constructor(address _lido, address _peusd, address _oracle, address _asset, address _config) LybraPeUSDVaultBase(_peusd, _oracle, _asset,_config) {
+        lido = Ilido(_lido);
+    }
 
     function depositEtherToMint(uint256 mintAmount) external payable override {
         require(msg.value >= 1 ether, "DNL");
-        Ilido lido = Ilido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
 
         uint256 sharesAmount = lido.submit{value: msg.value}(address(configurator));
         require(sharesAmount > 0, "ZERO_DEPOSIT");
@@ -46,7 +46,6 @@ contract LybraWstETHVault is LybraPeUSDVaultBase {
     }
 
     function getAssetPrice() public override returns (uint256) {
-        uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
-        return (etherPrice * IWstETH(address(collateralAsset)).stEthPerToken()) / 1e18;
+        return (_etherPrice() * IWstETH(address(collateralAsset)).stEthPerToken()) / 1e18;
     }
 }

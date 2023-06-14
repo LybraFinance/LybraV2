@@ -12,13 +12,10 @@ interface IWBETH {
     function deposit(address referral) external payable;
 }
 
-interface IPriceFeed {
-    function fetchPrice() external returns (uint256);
-}
-
 contract LybraWBETHVault is LybraPeUSDVaultBase {
-    constructor(address _peusd, address _config)
-        LybraPeUSDVaultBase(_peusd, 0xae78736Cd615f374D3085123A210448E74Fc6393, _config) {}
+    //WBETH = 0xae78736Cd615f374D3085123A210448E74Fc6393
+    constructor(address _peusd, address _oracle, address _asset, address _config)
+        LybraPeUSDVaultBase(_peusd, _oracle, _asset, _config) {}
 
     function depositEtherToMint(uint256 mintAmount) external payable override {
         require(msg.value >= 1 ether, "DNL");
@@ -35,7 +32,6 @@ contract LybraWBETHVault is LybraPeUSDVaultBase {
     }
 
     function getAssetPrice() public override returns (uint256) {
-        uint etherPrice = IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
-        return (etherPrice * IWBETH(address(collateralAsset)).exchangeRatio()) / 1e18;
+        return (_etherPrice() * IWBETH(address(collateralAsset)).exchangeRatio()) / 1e18;
     }
 }

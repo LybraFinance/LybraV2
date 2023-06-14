@@ -10,11 +10,16 @@ interface LbrStakingPool {
     function notifyRewardAmount(uint256 amount) external;
 }
 
+interface IPriceFeed {
+    function fetchPrice() external returns (uint256);
+}
+
 abstract contract LybraEUSDVaultBase {
     IEUSD public immutable EUSD;
     IERC20 public immutable collateralAsset;
     Iconfigurator public immutable configurator;
     uint256 public immutable badCollateralRatio = 150 * 1e18;
+    IPriceFeed immutable etherOracle;
 
     uint256 public totalDepositedAsset;
     uint256 public lastReportTime;
@@ -39,10 +44,11 @@ abstract contract LybraEUSDVaultBase {
     event RigidRedemption(address indexed caller, address indexed provider, uint256 eusdAmount, uint256 collateralAmount, uint256 timestamp);
     event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
 
-    constructor(address _collateralAsset, address _configurator) {
+    constructor(address _collateralAsset, address _etherOracle, address _configurator) {
         collateralAsset = IERC20(_collateralAsset);
         configurator = Iconfigurator(_configurator);
         EUSD = IEUSD(configurator.getEUSDAddress());
+        etherOracle = IPriceFeed(_etherOracle);
     }
 
     /**
@@ -296,6 +302,13 @@ abstract contract LybraEUSDVaultBase {
         return (poolTotalEUSDCirculation * configurator.vaultMintFeeApy(address(this)) * (block.timestamp - lastReportTime)) / (86400 * 365) / 10000;
     }
 
+    /**
+     * @dev Return USD value of current ETH through Liquity PriceFeed Contract.
+     */
+    function _etherPrice() internal returns (uint256) {
+        return etherOracle.fetchPrice();
+    }
+
     function getBorrowedOf(address user) external view returns (uint256) {
         return borrowed[user];
     }
@@ -312,5 +325,5 @@ abstract contract LybraEUSDVaultBase {
         return vaultType;
     }
 
-    function getAssetPrice() public virtual returns (uint256) {}
+    function getAssetPrice() public virtual returns (uint256);
 }

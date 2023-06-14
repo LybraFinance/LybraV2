@@ -5,10 +5,6 @@ pragma solidity ^0.8.17;
 import "../interfaces/IEUSD.sol";
 import "./base/LybraEUSDVaultBase.sol";
 
-interface IPriceFeed {
-    function fetchPrice() external returns (uint256);
-}
-
 interface Ilido {
     function submit(address _referral) external payable returns (uint256 StETH);
 }
@@ -17,14 +13,17 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
     // Currently, the official rebase time for Lido is between 12PM to 13PM UTC.
     uint256 public lidoRebaseTime = 12 hours;
 
-    constructor(address _config) LybraEUSDVaultBase(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84, _config) {}
+    // stETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84
+    // oracle = 0x4c517D4e2C851CA76d7eC94B805269Df0f2201De
+    constructor(address _config, address _stETH, address _oracle) LybraEUSDVaultBase(_stETH, _oracle, _config) {
+    }
 
     /**
      * @notice Sets the rebase time for Lido based on the actual situation.
      * This function can only be called by an address with the ADMIN role.
      */
     function setLidoRebaseTime(uint256 _time) external {
-        require(configurator.hasRole(keccak256("ADMIN"), msg.sender));
+        require(configurator.hasRole(keccak256("ADMIN"), msg.sender), "not authorized");
         lidoRebaseTime = _time;
     }
 
@@ -46,7 +45,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
         depositedTime[msg.sender] = block.timestamp;
 
         if (mintAmount > 0) {
-            _mintEUSD(msg.sender, msg.sender, mintAmount, _etherPrice());
+            _mintEUSD(msg.sender, msg.sender, mintAmount, getAssetPrice());
         }
 
         emit DepositEther(msg.sender, address(collateralAsset), msg.value, msg.value, block.timestamp);
@@ -61,8 +60,10 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
      * @dev Income is used to cover accumulated Service Fee first.
      */
     function excessIncomeDistribution(uint256 stETHAmount) external override {
-        require(stETHAmount <= collateralAsset.balanceOf(address(this)) - totalDepositedAsset &&stETHAmount > 0, "Only LSD excess income can be exchanged");
-        uint256 payAmount = (((stETHAmount * _etherPrice()) / 1e18) * getDutchAuctionDiscountPrice()) / 10000;
+        uint256 excessAmount = collateralAsset.balanceOf(address(this)) - totalDepositedAsset;
+        require(excessAmount > 0 && stETHAmount > 0, "Only LSD excess income can be exchanged");
+        uint256 realAmount = stETHAmount > excessAmount ? excessAmount : stETHAmount;
+        uint256 payAmount = (((realAmount * getAssetPrice()) / 1e18) * getDutchAuctionDiscountPrice()) / 10000;
 
         uint256 income = feeStored + _newFee();
         if (payAmount > income) {
@@ -89,8 +90,8 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
         }
 
         lastReportTime = block.timestamp;
-        collateralAsset.transfer(msg.sender, stETHAmount);
-        emit LSDValueCaptured(stETHAmount, payAmount, getDutchAuctionDiscountPrice(), block.timestamp);
+        collateralAsset.transfer(msg.sender, realAmount);
+        emit LSDValueCaptured(realAmount, payAmount, getDutchAuctionDiscountPrice(), block.timestamp);
     }
 
     /**
@@ -105,13 +106,5 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
 
     function getAssetPrice() public override returns (uint256) {
         return _etherPrice();
-    }
-
-    /**
-     * @dev Return USD value of current ETH through Liquity PriceFeed Contract.
-     * https://etherscan.io/address/0x4c517D4e2C851CA76d7eC94B805269Df0f2201De#code
-     */
-    function _etherPrice() internal returns (uint256) {
-        return IPriceFeed(0x4c517D4e2C851CA76d7eC94B805269Df0f2201De).fetchPrice();
     }
 }

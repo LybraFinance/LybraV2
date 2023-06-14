@@ -98,7 +98,7 @@ contract Configurator {
      * @param isActive A boolean indicating whether to activate or deactivate the vault.
      * @dev This function can only be called by the DAO.
      */
-    function setmintVault(address pool, bool isActive) external onlyRole(DAO) {
+    function setMintVault(address pool, bool isActive) external onlyRole(DAO) {
         mintVault[pool] = isActive;
     }
 
@@ -108,15 +108,15 @@ contract Configurator {
      * @param maxSupply The maximum amount of eUSD that can be minted for the asset pool.
      * @dev This function can only be called by the DAO.
      */
-    function setmintVaultMaxSupply(address pool, uint256 maxSupply) external onlyRole(DAO) {
+    function setMintVaultMaxSupply(address pool, uint256 maxSupply) external onlyRole(DAO) {
         mintVaultMaxSupply[pool] = maxSupply;
     }
 
     /**
-     * @notice  badCollateralRatio can be decided by DAO,starts at 120%
+     * @notice  badCollateralRatio can be decided by DAO,starts at 130%
      */
     function setBadCollateralRatio(address pool, uint256 newRatio) external onlyRole(DAO) {
-        require(newRatio >= 120 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] + 1e19, "Safe CollateralRatio should more than 160%");
+        require(newRatio >= 130 * 1e18 && newRatio <= 150 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] + 1e19, "LNA");
         vaultBadCollateralRatio[pool] = newRatio;
         emit SafeCollateralRatioChanged(pool, newRatio);
     }
@@ -296,7 +296,7 @@ contract Configurator {
     }
 
     function getBadCollateralRatio(address pool) external view returns(uint256) {
-        if(vaultBadCollateralRatio[pool] == 0) return vaultSafeCollateralRatio[pool] + 1e19;
+        if(vaultBadCollateralRatio[pool] == 0) return vaultSafeCollateralRatio[pool] - 1e19;
         return vaultBadCollateralRatio[pool];
     }
 
@@ -318,6 +318,6 @@ contract Configurator {
     }
 
     function hasRole(bytes32 role, address caller) external view returns (bool) {
-        return GovernanceTimelock.checkOnlyRole(role, caller);
+        return GovernanceTimelock.checkRole(role, caller);
     }
 }
