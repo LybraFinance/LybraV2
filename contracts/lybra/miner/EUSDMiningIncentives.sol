@@ -56,13 +56,7 @@ contract EUSDMiningIncentives is Ownable {
         AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
 
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
-    event BuyReward(
-        address indexed user,
-        address indexed Victim,
-        uint256 buyAmount,
-        uint256 biddingFee,
-        uint256 time
-    );
+    event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
     constructor(address _config, address _boost) {
@@ -182,12 +176,12 @@ contract EUSDMiningIncentives is Ownable {
         return ((stakedOf(_account) * getBoost(_account) * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
     }
 
-    function buyAbleByOther(address user) public view returns (bool) {
+    function isOtherEarningsClaimable(address user) public view returns (bool) {
         return (stakedLBRLpValue(user) * 10000) / stakedOf(user) < 500;
     }
 
     function getReward() external updateReward(msg.sender) {
-        require(!buyAbleByOther(msg.sender), "Insufficient DLP, unable to claim rewards");
+        require(!isOtherEarningsClaimable(msg.sender), "Insufficient DLP, unable to claim rewards");
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
@@ -196,8 +190,8 @@ contract EUSDMiningIncentives is Ownable {
         }
     }
 
-    function getOtherReward(address user) external updateReward(user) {
-        require(buyAbleByOther(user), "The rewards of the user cannot be bought out");
+    function purchaseOtherEarnings(address user) external updateReward(user) {
+        require(isOtherEarningsClaimable(user), "The rewards of the user cannot be bought out");
         uint256 reward = rewards[user];
         if (reward > 0) {
             rewards[user] = 0;
@@ -205,7 +199,7 @@ contract EUSDMiningIncentives is Ownable {
             IesLBR(LBR).burn(msg.sender, biddingFee);
             IesLBR(esLBR).mint(msg.sender, reward);
 
-            emit BuyReward(msg.sender, user, reward, biddingFee, block.timestamp);
+            emit ClaimedOtherEarnings(msg.sender, user, reward, biddingFee, block.timestamp);
         }
     }
 

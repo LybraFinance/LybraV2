@@ -40,7 +40,6 @@ abstract contract LybraEUSDVaultBase {
     event Burn(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event LiquidationRecord(address provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 liquidateEtherAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
     event LSDValueCaptured(uint256 stETHAdded, uint256 payoutEUSD, uint256 discountRate, uint256 timestamp);
-    event RedemptionProvider(address user, bool status);
     event RigidRedemption(address indexed caller, address indexed provider, uint256 eusdAmount, uint256 collateralAmount, uint256 timestamp);
     event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
 
