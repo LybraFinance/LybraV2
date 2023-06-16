@@ -57,14 +57,14 @@ contract LybraGovernance is GovernorTimelockControl {
      * @dev Amount of votes already cast passes the threshold limit.
      */
     function _quorumReached(uint256 proposalId) internal view override returns (bool){
-        return proposalData[proposalId].supportVotes[1] >= quorum(proposalSnapshot(proposalId));
+        return proposalData[proposalId].supportVotes[1] + proposalData[proposalId].supportVotes[2] >= quorum(proposalSnapshot(proposalId));
     }
 
        /**
      * @dev Is the proposal successful or not.
      */
     function _voteSucceeded(uint256 proposalId) internal view override returns (bool){
-        return _quorumReached(proposalId) && proposalData[proposalId].supportVotes[1] > proposalData[proposalId].supportVotes[0];
+        return _quorumReached(proposalId) && proposalData[proposalId].supportVotes[1] + proposalData[proposalId].supportVotes[2] > proposalData[proposalId].supportVotes[0] && clock() > proposalDeadline(proposalId);
     }
 
        /**
