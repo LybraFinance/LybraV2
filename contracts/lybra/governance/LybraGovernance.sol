@@ -64,7 +64,7 @@ contract LybraGovernance is GovernorTimelockControl {
      * @dev Is the proposal successful or not.
      */
     function _voteSucceeded(uint256 proposalId) internal view override returns (bool){
-        return _quorumReached(proposalId) && proposalData[proposalId].supportVotes[1] + proposalData[proposalId].supportVotes[2] > proposalData[proposalId].supportVotes[0] && clock() > proposalDeadline(proposalId);
+        return proposalData[proposalId].supportVotes[1] > proposalData[proposalId].supportVotes[0];
     }
 
        /**
@@ -109,9 +109,22 @@ contract LybraGovernance is GovernorTimelockControl {
         // _timelock.executeBatch{value: msg.value}(targets, values, calldatas, 0, descriptionHash);
     }
 
-     function getSupportVotes(uint256 proposalId, uint8 support) public view returns (uint256){
-         return proposalData[proposalId].supportVotes[support];
-     }
+    function proposals(uint256 proposalId) public view returns (uint256 id,address proposer,uint256 eta,uint256 startBlock,uint256 endBlock,uint256 forVotes,uint256 againstVotes,uint256 abstainVotes,bool canceled,bool executed) {
+        id = proposalId;
+        eta = proposalEta(proposalId);
+        startBlock = proposalSnapshot(proposalId);
+        endBlock = proposalDeadline(proposalId);
+
+        proposer = proposalProposer(proposalId);
+        
+        forVotes =  proposalData[proposalId].supportVotes[0];
+        againstVotes =  proposalData[proposalId].supportVotes[1];
+        abstainVotes =  proposalData[proposalId].supportVotes[2];
+
+        ProposalState currentState = state(proposalId);
+        canceled = currentState == ProposalState.Canceled;
+        executed = currentState == ProposalState.Executed;
+    }
 
     /**
      * @notice module:user-config
