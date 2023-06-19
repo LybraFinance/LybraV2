@@ -109,7 +109,7 @@ contract LybraGovernance is GovernorTimelockControl {
         // _timelock.executeBatch{value: msg.value}(targets, values, calldatas, 0, descriptionHash);
     }
 
-    function proposals(uint256 proposalId) public view returns (uint256 id,address proposer,uint256 eta,uint256 startBlock,uint256 endBlock,uint256 forVotes,uint256 againstVotes,uint256 abstainVotes,bool canceled,bool executed) {
+    function proposals(uint256 proposalId) external view returns (uint256 id, address proposer, uint256 eta, uint256 startBlock, uint256 endBlock, uint256 forVotes, uint256 againstVotes, uint256 abstainVotes, bool canceled, bool executed) {
         id = proposalId;
         eta = proposalEta(proposalId);
         startBlock = proposalSnapshot(proposalId);
@@ -124,6 +124,12 @@ contract LybraGovernance is GovernorTimelockControl {
         ProposalState currentState = state(proposalId);
         canceled = currentState == ProposalState.Canceled;
         executed = currentState == ProposalState.Executed;
+    }
+
+    function getReceipt(uint256 proposalId, address account) external view returns (bool voted, uint8 support, uint256 votes){  
+        voted = proposalData[proposalId].receipts[account].hasVoted;
+        support = proposalData[proposalId].receipts[account].support;
+        votes = proposalData[proposalId].receipts[account].votes;
     }
 
     /**
