@@ -313,7 +313,7 @@ contract Configurator {
      * @dev Return the maximum quantity of PeUSD that can be minted by using eUSD.
      * @return The maximum quantity of PeUSD that can be minted through eUSD.
      */
-    function getPeUSDMaxSupply() external view returns (uint256) {
+    function getEUSDMaxLocked() external view returns (uint256) {
         return (EUSD.totalSupply() * maxStableRatio) / 10_000;
     }
 
