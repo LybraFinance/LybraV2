@@ -17,7 +17,7 @@ pragma solidity ^0.8.17;
 import "../interfaces/IGovernanceTimelock.sol";
 import "../interfaces/IEUSD.sol";
 
-interface DividendPool {
+interface IDividendPool {
     function notifyRewardAmount(uint256 amount) external;
 }
 
@@ -45,7 +45,7 @@ contract Configurator {
     IGovernanceTimelock public GovernanceTimelock;
 
     IeUSDMiningIncentives public eUSDMiningIncentives;
-    DividendPool public lybraDividendPool;
+    IDividendPool public lybraDividendPool;
     IEUSD public EUSD;
     uint256 public flashloanFee = 500;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
@@ -127,7 +127,7 @@ contract Configurator {
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
      */
     function setDividendPool(address addr) external checkRole(TIMELOCK) {
-        lybraDividendPool = DividendPool(addr);
+        lybraDividendPool = IDividendPool(addr);
         emit DividendPoolChanged(addr, block.timestamp);
     }
 

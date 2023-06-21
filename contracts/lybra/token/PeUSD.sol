@@ -5,10 +5,10 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../../OFT/BaseOFTV2.sol";
 
-contract WeUSD is BaseOFTV2, ERC20 {
+contract PeUSD is BaseOFTV2, ERC20 {
     uint internal immutable ld2sdRatio;
 
-    constructor(uint8 _sharedDecimals, address _lzEndpoint) ERC20("Wrapped eUSD", "WeUSD") BaseOFTV2(_sharedDecimals, _lzEndpoint) {
+    constructor(uint8 _sharedDecimals, address _lzEndpoint) ERC20("peg-eUSD", "PeUSD") BaseOFTV2(_sharedDecimals, _lzEndpoint) {
         uint8 decimals = decimals();
         require(_sharedDecimals <= decimals, "OFT: sharedDecimals must be <= decimals");
         ld2sdRatio = 10 ** (decimals - _sharedDecimals);
