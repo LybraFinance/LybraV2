@@ -15,6 +15,8 @@ interface IEUSD {
         address spender
     ) external view returns (uint256);
 
+    function approve(address _spender, uint256 _amount) external returns (bool);
+
     function transferFrom(
         address from,
         address to,

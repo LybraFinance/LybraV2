@@ -52,17 +52,21 @@ contract EUSDMiningIncentives is Ownable {
     uint256 public biddingFeeRatio = 3000;
     address public ethlbrStakePool;
     address public ethlbrLpToken;
-    AggregatorV3Interface internal priceFeed =
-        AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+    AggregatorV3Interface internal etherPriceFeed;
+    AggregatorV3Interface internal lbrPriceFeed;
+    bool public isEUSDBuyoutAllowed = true;
 
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
-    event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, uint256 time);
+    event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, bool useEUSD, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
-    constructor(address _config, address _boost) {
+    //etherOracle = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
+    constructor(address _config, address _boost, address _etherOracle, address _lbrOracle) {
         configurator = Iconfigurator(_config);
         esLBRBoost = IesLBRBoost(_boost);
         EUSD = IEUSD(configurator.getEUSDAddress());
+        etherPriceFeed = AggregatorV3Interface(_etherOracle);
+        lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
     }
 
     modifier updateReward(address _account) {
@@ -77,12 +81,13 @@ contract EUSDMiningIncentives is Ownable {
         _;
     }
 
-    function setEsLBR(address _eslbr) external onlyOwner {
+    function setToken(address _lbr, address _eslbr) external onlyOwner {
+        LBR = _lbr;
         esLBR = _eslbr;
     }
 
-    function setLBR(address _lbr) external onlyOwner {
-        LBR = _lbr;
+    function setLBROracle(address _lbrOracle) external onlyOwner {
+        lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
     }
 
     function setPools(address[] memory _pools) external onlyOwner {
@@ -120,6 +125,9 @@ contract EUSDMiningIncentives is Ownable {
         ethlbrStakePool = _pool;
         ethlbrLpToken = _lp;
     }
+    function setEUSDBuyoutAllowed(bool _bool) external onlyOwner {
+        isEUSDBuyoutAllowed = _bool;
+    }
 
     function totalStaked() internal view returns (uint256) {
         return EUSD.totalSupply();
@@ -140,11 +148,12 @@ contract EUSDMiningIncentives is Ownable {
 
     function stakedLBRLpValue(address user) public view returns (uint256) {
         uint256 totalLp = IEUSD(ethlbrLpToken).totalSupply();
-        uint256 lpInethlbrStakePool = IEUSD(ethlbrLpToken).balanceOf(ethlbrStakePool);
-        (, int price, , , ) = priceFeed.latestRoundData();
-        uint256 lbrInLp = (IEUSD(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2).balanceOf(ethlbrLpToken) * uint(price)) / 1e8;
+        (, int etherPrice, , , ) = etherPriceFeed.latestRoundData();
+        (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
+        uint256 etherInLp = (IEUSD(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2).balanceOf(ethlbrLpToken) * uint(etherPrice)) / 1e8;
+        uint256 lbrInLp = (IEUSD(LBR).balanceOf(ethlbrLpToken) * uint(lbrPrice)) / 1e8;
         uint256 userStaked = IEUSD(ethlbrStakePool).balanceOf(user);
-        return (userStaked * lbrInLp * lpInethlbrStakePool * 2) / totalLp / IEUSD(ethlbrStakePool).totalSupply();
+        return (userStaked * (lbrInLp + etherInLp)) / totalLp;
     }
 
     function lastTimeRewardApplicable() public view returns (uint256) {
@@ -190,16 +199,27 @@ contract EUSDMiningIncentives is Ownable {
         }
     }
 
-    function purchaseOtherEarnings(address user) external updateReward(user) {
+    function purchaseOtherEarnings(address user, bool useEUSD) external updateReward(user) {
         require(isOtherEarningsClaimable(user), "The rewards of the user cannot be bought out");
+        if(useEUSD) {
+            require(isEUSDBuyoutAllowed, "The purchase using EUSD is not permitted.");
+        }
         uint256 reward = rewards[user];
         if (reward > 0) {
             rewards[user] = 0;
             uint256 biddingFee = (reward * biddingFeeRatio) / 10000;
-            IesLBR(LBR).burn(msg.sender, biddingFee);
+            if(useEUSD) {
+                (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
+                biddingFee = biddingFee * uint256(lbrPrice) / 1e8;
+                bool success = EUSD.transferFrom(msg.sender, address(configurator), biddingFee);
+                require(success, "TF");
+                try configurator.distributeDividends() {} catch {}
+            } else {
+                IesLBR(LBR).burn(msg.sender, biddingFee);
+            }
             IesLBR(esLBR).mint(msg.sender, reward);
 
-            emit ClaimedOtherEarnings(msg.sender, user, reward, biddingFee, block.timestamp);
+            emit ClaimedOtherEarnings(msg.sender, user, reward, biddingFee, useEUSD, block.timestamp);
         }
     }
 

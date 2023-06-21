@@ -18,6 +18,7 @@ interface Iconfigurator {
     function getDividendPool() external view returns(address);
     function flashloanFee() external view returns(uint256);
     function getEUSDMaxLocked() external view returns (uint256);
+    function dividendToken() external view returns (address);
     function isRedemptionProvider(address user) external view returns (bool);
     function becomeRedemptionProvider(bool _bool) external;
     function refreshMintReward(address user) external;

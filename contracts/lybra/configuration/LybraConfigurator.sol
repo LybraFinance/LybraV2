@@ -18,7 +18,7 @@ import "../interfaces/IGovernanceTimelock.sol";
 import "../interfaces/IEUSD.sol";
 
 interface IDividendPool {
-    function notifyRewardAmount(uint256 amount) external;
+    function notifyRewardAmount(uint256 amount, uint256 tokenType) external;
 }
 
 interface IeUSDMiningIncentives {
@@ -27,6 +27,11 @@ interface IeUSDMiningIncentives {
 
 interface IVault {
     function vaultType() external view returns (uint8);
+}
+
+interface ICurvePool{
+    function get_dy_underlying(int128 i, int128 j, uint256 dx) external view returns (uint256);
+    function exchange_underlying(int128 i, int128 j, uint256 dx, uint256 min_dy) external returns(uint256);
 }
 
 contract Configurator {
@@ -50,6 +55,9 @@ contract Configurator {
     uint256 public flashloanFee = 500;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
     uint256 maxStableRatio = 5_000;
+    address public dividendToken;
+    ICurvePool public curvePool;
+    bool public isControlledPremiumTrading;
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRatioChanged(address indexed pool, uint256 newRatio);
@@ -68,11 +76,9 @@ contract Configurator {
     bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
     bytes32 public constant ADMIN = keccak256("ADMIN");
 
-    /// @notice Thrown when trying to update token fees to an invalid percentage
-    error InvalidPercentage();
-
-    constructor(address _dao) {
+    constructor(address _dao, address _curvePool) {
         GovernanceTimelock = IGovernanceTimelock(_dao);
+        curvePool = ICurvePool(_curvePool);
     }
 
     modifier onlyRole(bytes32 role) {
@@ -234,9 +240,15 @@ contract Configurator {
     /// @notice Update the flashloan fee percentage, only available to the manager of the contract
     /// @param fee The fee percentage for eUSD, multiplied by 100 (for example, 10% is 1000)
     function setFlashloanFee(uint256 fee) external checkRole(TIMELOCK) {
-        if (fee > 10_000) revert InvalidPercentage();
+        if (fee > 10_000) revert('EL');
         emit FlashloanFeeUpdated(fee);
         flashloanFee = fee;
+    }
+
+    /// @notice Sets the address of the stablecoin used for dividends distribution.
+    /// @param _token The address of the stablecoin token.
+    function setDividendToken(address _token) external checkRole(TIMELOCK) {
+        dividendToken = _token;
     }
 
     /**
@@ -254,16 +266,28 @@ contract Configurator {
     function refreshMintReward(address user) external {
         eUSDMiningIncentives.refreshReward(user);
     }
-
+    
     /**
-     * @dev Distributes the temporarily held eUSD fees to the esLBR holders.
-     * @dev Requires the eUSD balance in the contract to be greater than 1000.
+     * @notice Distributes dividends to the LybraDividendPool based on the available balance of eUSD.
+     * If the balance is greater than 1e21, the distribution process is triggered.
+     * If isControlledPremiumTrading is false or the price of the trading pair (0, 2) on the Curve pool is less than or equal to 1005000, eUSD dividends are directly transferred to the LybraDividendPool.
+     * Otherwise, a controlled premium trading is performed by exchanging eUSD for the third token in the trading pair on the Curve pool, using a calculated amount to maintain a premium.
+     * The resulting token amount is transferred to the LybraDividendPool.
+     * @dev The dividend amount is notified to the LybraDividendPool for proper reward allocation.
      */
     function distributeDividends() external {
         uint256 balance = EUSD.balanceOf(address(this));
         if (balance > 1e21) {
-            EUSD.transfer(address(lybraDividendPool), balance);
-            lybraDividendPool.notifyRewardAmount(balance);
+            uint256 price = curvePool.get_dy_underlying(0, 2, 1e18);
+            if(!isControlledPremiumTrading || price <= 1005000) {
+                EUSD.transfer(address(lybraDividendPool), balance);
+                lybraDividendPool.notifyRewardAmount(balance, 0);
+            } else {
+                EUSD.approve(address(curvePool), balance);
+                uint256 amount = curvePool.exchange_underlying(0, 2, balance, balance * price * 998 / 1e21);
+                IEUSD(dividendToken).transfer(address(lybraDividendPool), amount);
+                lybraDividendPool.notifyRewardAmount(amount, 1);
+            }
         }
     }
 

@@ -43,7 +43,7 @@ contract DividendPool is Ownable {
     event StakeLBR(address indexed user, uint256 amount, uint256 time);
     event UnstakeLBR(address indexed user, uint256 amount, uint256 time);
     event WithdrawLBR(address indexed user, uint256 amount, uint256 time);
-    event ClaimReward(address indexed user, uint256 amount, uint256 time);
+    event ClaimReward(address indexed user, uint256 eUSDAmount, address token, uint256 tokenAmount, uint256 time);
 
     constructor(address _config) {
         configurator = Iconfigurator(_config);
@@ -183,30 +183,46 @@ contract DividendPool is Ownable {
 
     function refreshReward(address _account) external updateReward(_account) {}
 
+    /**
+     * @notice When claiming dividend earnings, if there is a sufficient amount of eUSD in the Dividend Pool,
+     * the eUSD will be prioritized for distribution. If the amount is insufficient, the remaining portion will be
+     * distributed in the form of other stablecoins defined in the configurator.
+     */
     function getReward() external updateReward(msg.sender) {
         uint reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
             IEUSD EUSD = IEUSD(configurator.getEUSDAddress());
-            EUSD.transferShares(msg.sender, reward);
-            emit ClaimReward(
-                msg.sender,
-                EUSD.getMintedEUSDByShares(reward),
-                block.timestamp
-            );
+            uint256 balance = EUSD.sharesOf(address(this));
+            uint256 eUSDShare = balance >= reward ? reward : reward - balance;
+            EUSD.transferShares(msg.sender, eUSDShare);
+            if(reward > eUSDShare) {
+                ERC20 token = ERC20(configurator.dividendToken());
+                uint256 tokenAmount = (reward - eUSDShare) * token.decimals() / 1e18;
+                token.transfer(msg.sender, tokenAmount);
+                emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(token), tokenAmount, block.timestamp);
+            } else {
+                emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(0), 0, block.timestamp);
+            }
+           
         }
     }
 
     /**
-     * @dev The amount of EUSD acquiered from the sender is euitably distributed to LBR stakers.
-     * Calculate share by amount, and calculate the shares could claim by per unit of staked ETH.
-     * Add into rewardPerTokenStored.
+     * @dev Receives stablecoin tokens sent by the configurator contract and records the dividend accumulation per esLBR held.
+     * @dev This function is called by the configurator contract to distribute dividends.
+     * @dev When receiving stablecoin tokens other than eUSD, the decimals of the token are converted to 18 for consistent calculations.
      */
-    function notifyRewardAmount(uint amount) external {
+    function notifyRewardAmount(uint amount, uint tokenType) external {
         require(msg.sender == address(configurator));
         if (totalStaked() == 0) return;
         require(amount > 0, "amount = 0");
-        uint256 share = IEUSD(configurator.getEUSDAddress()).getSharesByMintedEUSD(amount);
-        rewardPerTokenStored = rewardPerTokenStored + (share * 1e18) / totalStaked();
+        if(tokenType == 0) {
+            uint256 share = IEUSD(configurator.getEUSDAddress()).getSharesByMintedEUSD(amount);
+            rewardPerTokenStored = rewardPerTokenStored + (share * 1e18) / totalStaked();
+        } else {
+            ERC20 token = ERC20(configurator.dividendToken());
+            rewardPerTokenStored = rewardPerTokenStored + (amount * 1e36 / token.decimals()) / totalStaked();
+        }
     }
 }
