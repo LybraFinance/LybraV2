@@ -57,7 +57,7 @@ contract Configurator {
     uint256 maxStableRatio = 5_000;
     address public dividendToken;
     ICurvePool public curvePool;
-    bool public isControlledPremiumTrading;
+    bool public premiumTradingEnabled;
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRatioChanged(address indexed pool, uint256 newRatio);
@@ -155,6 +155,15 @@ contract Configurator {
      */
     function setvaultBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK) {
         vaultBurnPaused[pool] = isActive;
+    }
+
+    /**
+     * @notice Sets the status of premium trading.
+     * @param isActive Boolean value indicating whether premium trading is enabled or disabled.
+     * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
+     */
+    function setPremiumTradingEnabled(bool isActive) external checkRole(TIMELOCK) {
+        premiumTradingEnabled = isActive;
     }
 
     /**
@@ -270,7 +279,7 @@ contract Configurator {
     /**
      * @notice Distributes dividends to the LybraDividendPool based on the available balance of eUSD.
      * If the balance is greater than 1e21, the distribution process is triggered.
-     * If isControlledPremiumTrading is false or the price of the trading pair (0, 2) on the Curve pool is less than or equal to 1005000, eUSD dividends are directly transferred to the LybraDividendPool.
+     * If premiumTradingEnabled is false or the price of the trading pair (0, 2) on the Curve pool is less than or equal to 1005000, eUSD dividends are directly transferred to the LybraDividendPool.
      * Otherwise, a controlled premium trading is performed by exchanging eUSD for the third token in the trading pair on the Curve pool, using a calculated amount to maintain a premium.
      * The resulting token amount is transferred to the LybraDividendPool.
      * @dev The dividend amount is notified to the LybraDividendPool for proper reward allocation.
@@ -279,7 +288,7 @@ contract Configurator {
         uint256 balance = EUSD.balanceOf(address(this));
         if (balance > 1e21) {
             uint256 price = curvePool.get_dy_underlying(0, 2, 1e18);
-            if(!isControlledPremiumTrading || price <= 1005000) {
+            if(!premiumTradingEnabled || price <= 1005000) {
                 EUSD.transfer(address(lybraDividendPool), balance);
                 lybraDividendPool.notifyRewardAmount(balance, 0);
             } else {
