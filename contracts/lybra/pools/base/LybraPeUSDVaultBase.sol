@@ -29,7 +29,6 @@ abstract contract LybraPeUSDVaultBase {
     event WithdrawAsset(address sponsor, address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
     event Mint(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Burn(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
-    event RepayFee(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event LiquidationRecord(address provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 LiquidateAssetAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
 
     event RigidRedemption(address indexed caller, address indexed provider, uint256 peusdAmount, uint256 assetAmount, uint256 timestamp);
@@ -114,25 +113,6 @@ abstract contract LybraPeUSDVaultBase {
         _repay(msg.sender, onBehalfOf, amount);
     }
 
-    function repayFee(address onBehalfOf, uint256 amount) external virtual {
-        require(onBehalfOf != address(0), "TZA");
-        require(amount > 0, "ZA");
-        _repayFee(msg.sender, onBehalfOf, amount);
-    }
-
-    function withdrawAndRepayBorrowedAndFee(address onBehalfOf, uint256 borrowedAmount, uint256 feeAmount, uint256 withdrawAmount) external virtual {
-        require(onBehalfOf != address(0), "TZA");
-        if (feeAmount > 0) {
-            _repayFee(msg.sender, onBehalfOf, feeAmount);
-        }
-        if (borrowedAmount > 0) {
-            _repay(msg.sender, onBehalfOf, borrowedAmount);
-        }
-        if (withdrawAmount > 0) {
-            _withdraw(msg.sender, onBehalfOf, withdrawAmount);
-        }
-    }
-
     /**
      * @notice When overallCollateralRatio is above 150%, Keeper liquidates borrowers whose collateral ratio is below badCollateralRatio, using PeUSD provided by Liquidation Provider.
      *
@@ -212,27 +192,21 @@ abstract contract LybraPeUSDVaultBase {
     function _repay(address _provider, address _onBehalfOf, uint256 _amount) internal virtual {
         try configurator.refreshMintReward(_onBehalfOf) {} catch {}
         _updateFee(_onBehalfOf);
-        PeUSD.burn(_provider, _amount);
-        borrowed[_onBehalfOf] -= _amount;
-        poolTotalPeUSDCirculation -= _amount;
-
-        emit Burn(_provider, _onBehalfOf, _amount, block.timestamp);
-    }
-
-    function _repayFee(address _provider, address _onBehalfOf, uint256 _amount) internal virtual {
-        uint256 totalFee = feeStored[_onBehalfOf] + _newFee(_onBehalfOf);
-        if (_amount >= totalFee) {
+        uint256 totalFee = feeStored[_onBehalfOf];
+        uint256 amount = borrowed[_onBehalfOf] + totalFee >= _amount ? _amount : borrowed[_onBehalfOf] + totalFee;
+        if(amount >= totalFee) {
             feeStored[_onBehalfOf] = 0;
-            bool success = IERC20(configurator.getEUSDAddress()).transferFrom(_provider, address(configurator), totalFee);
-            require(success, "TF");
+            PeUSD.transferFrom(_provider, address(configurator), totalFee);
+            PeUSD.burn(_provider, amount - totalFee);
         } else {
-            feeStored[_onBehalfOf] = totalFee - _amount;
-            bool success = IERC20(configurator.getEUSDAddress()).transferFrom(_provider, address(configurator), _amount);
-            require(success, "TF");
+            feeStored[_onBehalfOf] = totalFee - amount;
+            PeUSD.transferFrom(_provider, address(configurator), amount);
         }
         try configurator.distributeRewards() {} catch {}
-        feeUpdatedAt[_onBehalfOf] = block.timestamp;
-        emit RepayFee(_provider, _onBehalfOf, _amount, block.timestamp);
+        borrowed[_onBehalfOf] -= amount;
+        poolTotalPeUSDCirculation -= amount;
+
+        emit Burn(_provider, _onBehalfOf, amount, block.timestamp);
     }
 
     function _withdraw(address _provider, address _onBehalfOf, uint256 _amount) internal {

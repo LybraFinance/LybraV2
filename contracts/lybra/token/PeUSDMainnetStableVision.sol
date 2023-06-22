@@ -138,6 +138,15 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
         emit Flashloaned(receiver, eusdAmount, burnShare);
     }
 
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        address spender = _msgSender();
+        if (!configurator.mintVault(spender)) {
+            _spendAllowance(from, spender, amount);
+        }
+        _transfer(from, to, amount);
+        return true;
+    }
+
     /************************************************************************
      * view functions
      ************************************************************************/

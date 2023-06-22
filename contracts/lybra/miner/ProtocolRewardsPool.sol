@@ -185,8 +185,7 @@ contract ProtocolRewardsPool is Ownable {
 
     /**
      * @notice When claiming protocol rewards earnings, if there is a sufficient amount of eUSD in the ProtocolRewards Pool,
-     * the eUSD will be prioritized for distribution. If the amount is insufficient, the remaining portion will be
-     * distributed in the form of other stablecoins defined in the configurator.
+     * the eUSD will be prioritized for distribution. Distributes earnings in the order of peUSD and other stablecoins if the eUSD balance is insufficient..
      */
     function getReward() external updateReward(msg.sender) {
         uint reward = rewards[msg.sender];
@@ -197,10 +196,20 @@ contract ProtocolRewardsPool is Ownable {
             uint256 eUSDShare = balance >= reward ? reward : reward - balance;
             EUSD.transferShares(msg.sender, eUSDShare);
             if(reward > eUSDShare) {
-                ERC20 token = ERC20(configurator.stableToken());
-                uint256 tokenAmount = (reward - eUSDShare) * token.decimals() / 1e18;
-                token.transfer(msg.sender, tokenAmount);
-                emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(token), tokenAmount, block.timestamp);
+                ERC20 peUSD = ERC20(configurator.peUSD());
+                uint256 peUSDBalance = peUSD.balanceOf(address(this));
+                if(peUSDBalance >= reward - eUSDShare) {
+                    peUSD.transfer(msg.sender, reward - eUSDShare);
+                    emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(peUSD), reward - eUSDShare, block.timestamp);
+                } else {
+                    if(peUSDBalance > 0) {
+                        peUSD.transfer(msg.sender, peUSDBalance);
+                    }
+                    ERC20 token = ERC20(configurator.stableToken());
+                    uint256 tokenAmount = (reward - eUSDShare - peUSDBalance) * token.decimals() / 1e18;
+                    token.transfer(msg.sender, tokenAmount);
+                    emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(token), reward - eUSDShare, block.timestamp);
+                }
             } else {
                 emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(0), 0, block.timestamp);
             }
@@ -210,6 +219,8 @@ contract ProtocolRewardsPool is Ownable {
 
     /**
      * @dev Receives stablecoin tokens sent by the configurator contract and records the protocol rewards accumulation per esLBR held.
+     * @param amount The amount of rewards to be distributed.
+     * @param tokenType The type of token (0 for eUSD, 1 for other stablecoins, 2 for peUSD).
      * @dev This function is called by the configurator contract to distribute rewards.
      * @dev When receiving stablecoin tokens other than eUSD, the decimals of the token are converted to 18 for consistent calculations.
      */
@@ -220,9 +231,11 @@ contract ProtocolRewardsPool is Ownable {
         if(tokenType == 0) {
             uint256 share = IEUSD(configurator.getEUSDAddress()).getSharesByMintedEUSD(amount);
             rewardPerTokenStored = rewardPerTokenStored + (share * 1e18) / totalStaked();
-        } else {
+        } else if(tokenType == 1) {
             ERC20 token = ERC20(configurator.stableToken());
             rewardPerTokenStored = rewardPerTokenStored + (amount * 1e36 / token.decimals()) / totalStaked();
+        } else {
+            rewardPerTokenStored = rewardPerTokenStored + (amount * 1e18) / totalStaked();
         }
     }
 }

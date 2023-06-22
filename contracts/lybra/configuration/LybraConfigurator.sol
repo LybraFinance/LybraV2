@@ -52,6 +52,7 @@ contract Configurator {
     IeUSDMiningIncentives public eUSDMiningIncentives;
     IProtocolRewardsPool public lybraProtocolRewardsPool;
     IEUSD public EUSD;
+    IEUSD public peUSD;
     uint256 public flashloanFee = 500;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
     uint256 maxStableRatio = 5_000;
@@ -92,10 +93,11 @@ contract Configurator {
     }
 
     /**
-     * @notice Initializes the eUSD address. This function can only be executed once.
+     * @notice Initializes the eUSD and peUSD address. This function can only be executed once.
      */
-    function initEUSD(address _eusd) external onlyRole(DAO) {
+    function initToken(address _eusd, address _peusd) external onlyRole(DAO) {
         if (address(EUSD) == address(0)) EUSD = IEUSD(_eusd);
+        if (address(peUSD) == address(0)) peUSD = IEUSD(_peusd);
     }
 
     /**
@@ -285,6 +287,11 @@ contract Configurator {
      * @dev The protocol rewards amount is notified to the LybraProtocolRewardsPool for proper reward allocation.
      */
     function distributeRewards() external {
+        uint256 peUSDBalance = peUSD.balanceOf(address(this));
+        if(peUSDBalance >= 1e21) {
+            peUSD.transfer(address(lybraProtocolRewardsPool), peUSDBalance);
+            lybraProtocolRewardsPool.notifyRewardAmount(peUSDBalance, 2);
+        }
         uint256 balance = EUSD.balanceOf(address(this));
         if (balance > 1e21) {
             uint256 price = curvePool.get_dy_underlying(0, 2, 1e18);

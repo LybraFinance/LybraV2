@@ -14,6 +14,7 @@ interface Iconfigurator {
     function vaultKeeperRatio(address pool) external view returns(uint256);
     function redemptionFee() external view returns(uint256);
     function getEUSDAddress() external view returns(address);
+    function peUSD() external view returns(address);
     function eUSDMiningIncentives() external view returns(address);
     function getProtocolRewardsPool() external view returns(address);
     function flashloanFee() external view returns(uint256);
