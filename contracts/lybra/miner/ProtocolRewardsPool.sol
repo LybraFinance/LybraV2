@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.17;
 /**
- * @title DividendPool is a derivative version of Synthetix StakingRewards.sol, distributing Protocol revenue to esLBR stakers.
+ * @title ProtocolRewardsPool is a derivative version of Synthetix StakingRewards.sol, distributing Protocol revenue to esLBR stakers.
  * Converting esLBR to LBR.
  * Differences from the original contract,
  * - Get `totalStaked` from totalSupply() in contract esLBR.
@@ -21,7 +21,7 @@ interface IesLBRBoost {
     ) external view returns (uint256 unlockTime);
 }
 
-contract DividendPool is Ownable {
+contract ProtocolRewardsPool is Ownable {
     Iconfigurator public immutable configurator;
     IesLBR public esLBR;
     IesLBR public LBR;
@@ -184,7 +184,7 @@ contract DividendPool is Ownable {
     function refreshReward(address _account) external updateReward(_account) {}
 
     /**
-     * @notice When claiming dividend earnings, if there is a sufficient amount of eUSD in the Dividend Pool,
+     * @notice When claiming protocol rewards earnings, if there is a sufficient amount of eUSD in the ProtocolRewards Pool,
      * the eUSD will be prioritized for distribution. If the amount is insufficient, the remaining portion will be
      * distributed in the form of other stablecoins defined in the configurator.
      */
@@ -197,7 +197,7 @@ contract DividendPool is Ownable {
             uint256 eUSDShare = balance >= reward ? reward : reward - balance;
             EUSD.transferShares(msg.sender, eUSDShare);
             if(reward > eUSDShare) {
-                ERC20 token = ERC20(configurator.dividendToken());
+                ERC20 token = ERC20(configurator.stableToken());
                 uint256 tokenAmount = (reward - eUSDShare) * token.decimals() / 1e18;
                 token.transfer(msg.sender, tokenAmount);
                 emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(token), tokenAmount, block.timestamp);
@@ -209,8 +209,8 @@ contract DividendPool is Ownable {
     }
 
     /**
-     * @dev Receives stablecoin tokens sent by the configurator contract and records the dividend accumulation per esLBR held.
-     * @dev This function is called by the configurator contract to distribute dividends.
+     * @dev Receives stablecoin tokens sent by the configurator contract and records the protocol rewards accumulation per esLBR held.
+     * @dev This function is called by the configurator contract to distribute rewards.
      * @dev When receiving stablecoin tokens other than eUSD, the decimals of the token are converted to 18 for consistent calculations.
      */
     function notifyRewardAmount(uint amount, uint tokenType) external {
@@ -221,7 +221,7 @@ contract DividendPool is Ownable {
             uint256 share = IEUSD(configurator.getEUSDAddress()).getSharesByMintedEUSD(amount);
             rewardPerTokenStored = rewardPerTokenStored + (share * 1e18) / totalStaked();
         } else {
-            ERC20 token = ERC20(configurator.dividendToken());
+            ERC20 token = ERC20(configurator.stableToken());
             rewardPerTokenStored = rewardPerTokenStored + (amount * 1e36 / token.decimals()) / totalStaked();
         }
     }

@@ -70,7 +70,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
             bool success = EUSD.transferFrom(msg.sender, address(configurator), income);
             require(success, "TF");
 
-            try configurator.distributeDividends() {} catch {}
+            try configurator.distributeRewards() {} catch {}
 
             uint256 sharesAmount = EUSD.getSharesByMintedEUSD(payAmount - income);
             if (sharesAmount == 0) {
@@ -84,7 +84,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
         } else {
             bool success = EUSD.transferFrom(msg.sender, address(configurator), payAmount);
             require(success, "TF");
-            try configurator.distributeDividends() {} catch {}
+            try configurator.distributeRewards() {} catch {}
             feeStored = income - payAmount;
             emit FeeDistribution(address(configurator), payAmount, block.timestamp);
         }

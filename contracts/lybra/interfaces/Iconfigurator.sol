@@ -15,13 +15,13 @@ interface Iconfigurator {
     function redemptionFee() external view returns(uint256);
     function getEUSDAddress() external view returns(address);
     function eUSDMiningIncentives() external view returns(address);
-    function getDividendPool() external view returns(address);
+    function getProtocolRewardsPool() external view returns(address);
     function flashloanFee() external view returns(uint256);
     function getEUSDMaxLocked() external view returns (uint256);
-    function dividendToken() external view returns (address);
+    function stableToken() external view returns (address);
     function isRedemptionProvider(address user) external view returns (bool);
     function becomeRedemptionProvider(bool _bool) external;
     function refreshMintReward(address user) external;
-    function distributeDividends() external;
+    function distributeRewards() external;
     function hasRole(bytes32 role, address account) external view returns (bool);
 }

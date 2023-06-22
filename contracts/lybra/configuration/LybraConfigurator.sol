@@ -17,7 +17,7 @@ pragma solidity ^0.8.17;
 import "../interfaces/IGovernanceTimelock.sol";
 import "../interfaces/IEUSD.sol";
 
-interface IDividendPool {
+interface IProtocolRewardsPool {
     function notifyRewardAmount(uint256 amount, uint256 tokenType) external;
 }
 
@@ -50,19 +50,19 @@ contract Configurator {
     IGovernanceTimelock public GovernanceTimelock;
 
     IeUSDMiningIncentives public eUSDMiningIncentives;
-    IDividendPool public lybraDividendPool;
+    IProtocolRewardsPool public lybraProtocolRewardsPool;
     IEUSD public EUSD;
     uint256 public flashloanFee = 500;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
     uint256 maxStableRatio = 5_000;
-    address public dividendToken;
+    address public stableToken;
     ICurvePool public curvePool;
     bool public premiumTradingEnabled;
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRatioChanged(address indexed pool, uint256 newRatio);
     event RedemptionProvider(address indexed user, bool status);
-    event DividendPoolChanged(address indexed pool, uint256 timestamp);
+    event ProtocolRewardsPoolChanged(address indexed pool, uint256 timestamp);
     event EUSDMiningIncentivesChanged(address indexed pool, uint256 timestamp);
     event BorrowApyChanged(address indexed pool, uint256 newApy);
     event KeeperRatioChanged(address indexed pool, uint256 newSlippage);
@@ -128,13 +128,13 @@ contract Configurator {
     }
 
     /**
-     * @notice Sets the address of the dividend pool.
-     * @param addr The new address of the dividend pool.
+     * @notice Sets the address of the protocol rewards pool.
+     * @param addr The new address of the protocol rewards pool.
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
      */
-    function setDividendPool(address addr) external checkRole(TIMELOCK) {
-        lybraDividendPool = IDividendPool(addr);
-        emit DividendPoolChanged(addr, block.timestamp);
+    function setProtocolRewardsPool(address addr) external checkRole(TIMELOCK) {
+        lybraProtocolRewardsPool = IProtocolRewardsPool(addr);
+        emit ProtocolRewardsPoolChanged(addr, block.timestamp);
     }
 
     /**
@@ -254,10 +254,10 @@ contract Configurator {
         flashloanFee = fee;
     }
 
-    /// @notice Sets the address of the stablecoin used for dividends distribution.
+    /// @notice Sets the address of the stablecoin used for rewards distribution.
     /// @param _token The address of the stablecoin token.
-    function setDividendToken(address _token) external checkRole(TIMELOCK) {
-        dividendToken = _token;
+    function setProtocolRewardsToken(address _token) external checkRole(TIMELOCK) {
+        stableToken = _token;
     }
 
     /**
@@ -277,25 +277,25 @@ contract Configurator {
     }
     
     /**
-     * @notice Distributes dividends to the LybraDividendPool based on the available balance of eUSD.
+     * @notice Distributes rewards to the LybraProtocolRewardsPool based on the available balance of eUSD.
      * If the balance is greater than 1e21, the distribution process is triggered.
-     * If premiumTradingEnabled is false or the price of the trading pair (0, 2) on the Curve pool is less than or equal to 1005000, eUSD dividends are directly transferred to the LybraDividendPool.
+     * If premiumTradingEnabled is false or the price of the trading pair (0, 2) on the Curve pool is less than or equal to 1005000, eUSD rewards are directly transferred to the LybraProtocolRewardsPool.
      * Otherwise, a controlled premium trading is performed by exchanging eUSD for the third token in the trading pair on the Curve pool, using a calculated amount to maintain a premium.
-     * The resulting token amount is transferred to the LybraDividendPool.
-     * @dev The dividend amount is notified to the LybraDividendPool for proper reward allocation.
+     * The resulting token amount is transferred to the LybraProtocolRewardsPool.
+     * @dev The protocol rewards amount is notified to the LybraProtocolRewardsPool for proper reward allocation.
      */
-    function distributeDividends() external {
+    function distributeRewards() external {
         uint256 balance = EUSD.balanceOf(address(this));
         if (balance > 1e21) {
             uint256 price = curvePool.get_dy_underlying(0, 2, 1e18);
             if(!premiumTradingEnabled || price <= 1005000) {
-                EUSD.transfer(address(lybraDividendPool), balance);
-                lybraDividendPool.notifyRewardAmount(balance, 0);
+                EUSD.transfer(address(lybraProtocolRewardsPool), balance);
+                lybraProtocolRewardsPool.notifyRewardAmount(balance, 0);
             } else {
                 EUSD.approve(address(curvePool), balance);
                 uint256 amount = curvePool.exchange_underlying(0, 2, balance, balance * price * 998 / 1e21);
-                IEUSD(dividendToken).transfer(address(lybraDividendPool), amount);
-                lybraDividendPool.notifyRewardAmount(amount, 1);
+                IEUSD(stableToken).transfer(address(lybraProtocolRewardsPool), amount);
+                lybraProtocolRewardsPool.notifyRewardAmount(amount, 1);
             }
         }
     }
@@ -309,11 +309,11 @@ contract Configurator {
     }
 
     /**
-     * @dev Returns the address of the Lybra dividend pool.
-     * @return The address of the Lybra dividend pool.
+     * @dev Returns the address of the Lybra protocol rewards pool.
+     * @return The address of the Lybra protocol rewards pool.
      */
-    function getDividendPool() external view returns (address) {
-        return address(lybraDividendPool);
+    function getProtocolRewardsPool() external view returns (address) {
+        return address(lybraProtocolRewardsPool);
     }
 
     /**

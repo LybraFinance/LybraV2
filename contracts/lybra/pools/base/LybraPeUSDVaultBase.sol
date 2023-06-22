@@ -230,7 +230,7 @@ abstract contract LybraPeUSDVaultBase {
             bool success = IERC20(configurator.getEUSDAddress()).transferFrom(_provider, address(configurator), _amount);
             require(success, "TF");
         }
-        try configurator.distributeDividends() {} catch {}
+        try configurator.distributeRewards() {} catch {}
         feeUpdatedAt[_onBehalfOf] = block.timestamp;
         emit RepayFee(_provider, _onBehalfOf, _amount, block.timestamp);
     }

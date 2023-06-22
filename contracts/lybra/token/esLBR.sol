@@ -30,14 +30,14 @@ contract esLBR is ERC20Votes {
     function mint(address user, uint256 amount) external returns (bool) {
         require(configurator.tokenMiner(msg.sender), "not authorized");
         require(totalSupply() + amount <= maxSupply, "exceeding the maximum supply quantity.");
-        try IdividendPool(configurator.getDividendPool()).refreshReward(user) {} catch {}
+        try IdividendPool(configurator.getProtocolRewardsPool()).refreshReward(user) {} catch {}
         _mint(user, amount);
         return true;
     }
 
     function burn(address user, uint256 amount) external returns (bool) {
         require(configurator.tokenMiner(msg.sender), "not authorized");
-        try IdividendPool(configurator.getDividendPool()).refreshReward(user) {} catch {}
+        try IdividendPool(configurator.getProtocolRewardsPool()).refreshReward(user) {} catch {}
         _burn(user, amount);
         return true;
     }
