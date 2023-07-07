@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "../interfaces/Iconfigurator.sol";
@@ -35,7 +34,6 @@ import "../interfaces/Iconfigurator.sol";
  * emitting an event for each token holder and thus running an unbounded loop.
  */
 contract EUSD is IERC20, Context {
-    using SafeMath for uint256;
     Iconfigurator public immutable configurator;
     uint256 private _totalShares;
     uint256 private _totalSupply;
@@ -146,7 +144,6 @@ contract EUSD is IERC20, Context {
      *
      * - `_recipient` cannot be the zero address.
      * - the caller must have a balance of at least `_amount`.
-     * - the contract must not be paused.
      *
      * @dev The `_amount` argument is the amount of tokens, not shares.
      */
@@ -193,7 +190,6 @@ contract EUSD is IERC20, Context {
      * Requirements:
      *
      * - `_spender` cannot be the zero address.
-     * - the contract must not be paused.
      *
      * @dev The `_amount` argument is the amount of tokens, not shares.
      */
@@ -219,7 +215,6 @@ contract EUSD is IERC20, Context {
      * - `_sender` and `_recipient` cannot be the zero addresses.
      * - `_sender` must have a balance of at least `_amount`.
      * - the caller must have allowance for `_sender`'s tokens of at least `_amount`.
-     * - the contract must not be paused.
      *
      * @dev The `_amount` argument is the amount of tokens, not shares.
      */
@@ -243,11 +238,10 @@ contract EUSD is IERC20, Context {
      * Requirements:
      *
      * - `_spender` cannot be the the zero address.
-     * - the contract must not be paused.
      */
     function increaseAllowance(address _spender, uint256 _addedValue) public returns (bool) {
         address owner = _msgSender();
-        _approve(owner, _spender, allowances[owner][_spender].add(_addedValue));
+        _approve(owner, _spender, allowances[owner][_spender] + _addedValue);
         return true;
     }
 
@@ -263,7 +257,6 @@ contract EUSD is IERC20, Context {
      *
      * - `_spender` cannot be the zero address.
      * - `_spender` must have allowance for the caller of at least `_subtractedValue`.
-     * - the contract must not be paused.
      */
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
         address owner = _msgSender();
@@ -300,9 +293,8 @@ contract EUSD is IERC20, Context {
         uint256 totalMintedEUSD = _totalSupply;
         if (totalMintedEUSD == 0) {
             return 0;
-        } else {
-            return _EUSDAmount.mul(_totalShares).div(totalMintedEUSD);
         }
+        return _EUSDAmount *_totalShares / totalMintedEUSD;
     }
 
     /**
@@ -311,9 +303,8 @@ contract EUSD is IERC20, Context {
     function getMintedEUSDByShares(uint256 _sharesAmount) public view returns (uint256) {
         if (_totalShares == 0) {
             return 0;
-        } else {
-            return _sharesAmount.mul(_totalSupply).div(_totalShares);
         }
+        return _sharesAmount * _totalSupply / _totalShares;
     }
 
     /**
@@ -327,7 +318,6 @@ contract EUSD is IERC20, Context {
      *
      * - `_recipient` cannot be the zero address.
      * - the caller must have at least `_sharesAmount` shares.
-     * - the contract must not be paused.
      *
      * @dev The `_sharesAmount` argument is the amount of shares, not tokens.
      */
@@ -361,7 +351,6 @@ contract EUSD is IERC20, Context {
      *
      * - `_owner` cannot be the zero address.
      * - `_spender` cannot be the zero address.
-     * - the contract must not be paused.
      */
     function _approve(address _owner, address _spender, uint256 _amount) internal {
         require(_owner != address(0), "APPROVE_FROM_ZERO_ADDRESS");
@@ -386,7 +375,6 @@ contract EUSD is IERC20, Context {
      * - `_sender` cannot be the zero address.
      * - `_recipient` cannot be the zero address.
      * - `_sender` must hold at least `_sharesAmount` shares.
-     * - the contract must not be paused.
      */
     function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal {
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
@@ -395,8 +383,8 @@ contract EUSD is IERC20, Context {
         uint256 currentSenderShares = shares[_sender];
         require(_sharesAmount <= currentSenderShares, "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
 
-        shares[_sender] = currentSenderShares.sub(_sharesAmount);
-        shares[_recipient] = shares[_recipient].add(_sharesAmount);
+        shares[_sender] = currentSenderShares - _sharesAmount;
+        shares[_recipient] = shares[_recipient] + _sharesAmount;
     }
 
     /**
@@ -410,17 +398,18 @@ contract EUSD is IERC20, Context {
      */
     function mint(address _recipient, uint256 _mintAmount) external onlyMintVault MintPaused returns (uint256 newTotalShares) {
         require(_recipient != address(0), "MINT_TO_THE_ZERO_ADDRESS");
-
+        require(_mintAmount != 0, "ZA");
         uint256 sharesAmount = getSharesByMintedEUSD(_mintAmount);
         if (sharesAmount == 0) {
-            //EUSD totalSupply is 0: assume that shares correspond to EUSD 1-to-1
+            require(_totalSupply == 0, "ZA");
+            //eUSD totalSupply is 0: assume that shares correspond to EUSD 1-to-1
             sharesAmount = _mintAmount;
         }
 
-        newTotalShares = _totalShares.add(sharesAmount);
+        newTotalShares = _totalShares + sharesAmount;
         _totalShares = newTotalShares;
 
-        shares[_recipient] = shares[_recipient].add(sharesAmount);
+        shares[_recipient] = shares[_recipient] + sharesAmount;
 
         _totalSupply += _mintAmount;
 
@@ -440,6 +429,7 @@ contract EUSD is IERC20, Context {
     function burn(address _account, uint256 _burnAmount) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
         uint256 sharesAmount = getSharesByMintedEUSD(_burnAmount);
+        require(sharesAmount != 0, "ZA");
         newTotalShares = _onlyBurnShares(_account, sharesAmount);
         _totalSupply -= _burnAmount;
 
@@ -458,6 +448,7 @@ contract EUSD is IERC20, Context {
      */
     function burnShares(address _account, uint256 _sharesAmount) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
+        require(_sharesAmount != 0, "ZA");
         newTotalShares = _onlyBurnShares(_account, _sharesAmount);
     }
 
@@ -467,10 +458,10 @@ contract EUSD is IERC20, Context {
 
         uint256 preRebaseTokenAmount = getMintedEUSDByShares(_sharesAmount);
 
-        newTotalShares = _totalShares.sub(_sharesAmount);
+        newTotalShares = _totalShares - _sharesAmount;
         _totalShares = newTotalShares;
 
-        shares[_account] = accountShares.sub(_sharesAmount);
+        shares[_account] = accountShares - _sharesAmount;
 
         uint256 postRebaseTokenAmount = getMintedEUSDByShares(_sharesAmount);
 

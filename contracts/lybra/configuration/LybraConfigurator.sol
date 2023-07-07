@@ -15,7 +15,10 @@
 pragma solidity ^0.8.17;
 
 import "../interfaces/IGovernanceTimelock.sol";
-import "../interfaces/IEUSD.sol";
+import "../interfaces/IPeUSD.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 interface IProtocolRewardsPool {
     function notifyRewardAmount(uint256 amount, uint256 tokenType) external;
@@ -26,15 +29,15 @@ interface IeUSDMiningIncentives {
 }
 
 interface IVault {
-    function vaultType() external view returns (uint8);
+    function getVaultType() external view returns (uint8);
 }
 
 interface ICurvePool{
-    function get_dy_underlying(int128 i, int128 j, uint256 dx) external view returns (uint256);
     function exchange_underlying(int128 i, int128 j, uint256 dx, uint256 min_dy) external returns(uint256);
 }
 
-contract Configurator {
+contract LybraConfigurator {
+    using SafeERC20 for IERC20;
     mapping(address => bool) public mintVault;
     mapping(address => uint256) public mintVaultMaxSupply;
     mapping(address => bool) public vaultMintPaused;
@@ -45,20 +48,26 @@ contract Configurator {
     mapping(address => uint256) public vaultKeeperRatio;
     mapping(address => bool) redemptionProvider;
     mapping(address => bool) public tokenMiner;
+    mapping(address => uint256) vaultWeight;
+
+    AggregatorV3Interface public eUSDPriceFeed;
 
     uint256 public redemptionFee = 50;
     IGovernanceTimelock public GovernanceTimelock;
 
     IeUSDMiningIncentives public eUSDMiningIncentives;
     IProtocolRewardsPool public lybraProtocolRewardsPool;
-    IEUSD public EUSD;
-    IEUSD public peUSD;
+    IPeUSD public EUSD;
+    IPeUSD public peUSD;
     uint256 public flashloanFee = 500;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
     uint256 maxStableRatio = 5_000;
     address public stableToken;
     ICurvePool public curvePool;
     bool public premiumTradingEnabled;
+    bytes32 public constant DAO = keccak256("DAO");
+    bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
+    bytes32 public constant ADMIN = keccak256("ADMIN");
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRatioChanged(address indexed pool, uint256 newRatio);
@@ -68,27 +77,28 @@ contract Configurator {
     event BorrowApyChanged(address indexed pool, uint256 newApy);
     event KeeperRatioChanged(address indexed pool, uint256 newSlippage);
     event tokenMinerChanges(address indexed pool, bool status);
+    event VaultWeightChanged(address indexed pool, uint256 weight, uint256 timestamp);
+    event SendProtocolRewards(address indexed token, uint256 amount, uint256 timestamp);
 
     /// @notice Emitted when the fees for flash loaning a token have been updated
     /// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
     event FlashloanFeeUpdated(uint256 fee);
 
-    bytes32 public constant DAO = keccak256("DAO");
-    bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
-    bytes32 public constant ADMIN = keccak256("ADMIN");
-
-    constructor(address _dao, address _curvePool) {
+    //stableToken = USDC
+    constructor(address _dao, address _curvePool, address _eUSDPriceFeed, address _stableToken) {
         GovernanceTimelock = IGovernanceTimelock(_dao);
         curvePool = ICurvePool(_curvePool);
+        eUSDPriceFeed = AggregatorV3Interface(_eUSDPriceFeed);
+        stableToken = _stableToken;
     }
 
     modifier onlyRole(bytes32 role) {
-        GovernanceTimelock.checkOnlyRole(role, msg.sender);
+        require(GovernanceTimelock.checkOnlyRole(role, msg.sender), "NA");
         _;
     }
 
     modifier checkRole(bytes32 role) {
-        GovernanceTimelock.checkRole(role, msg.sender);
+        require(GovernanceTimelock.checkRole(role, msg.sender), "NA");
         _;
     }
 
@@ -96,8 +106,9 @@ contract Configurator {
      * @notice Initializes the eUSD and peUSD address. This function can only be executed once.
      */
     function initToken(address _eusd, address _peusd) external onlyRole(DAO) {
-        if (address(EUSD) == address(0)) EUSD = IEUSD(_eusd);
-        if (address(peUSD) == address(0)) peUSD = IEUSD(_peusd);
+        if (address(EUSD) == address(0)) EUSD = IPeUSD(_eusd);
+        if (address(peUSD) == address(0)) peUSD = IPeUSD(_peusd);
+        EUSD.approve(_peusd, type(uint256).max);
     }
 
     /**
@@ -149,14 +160,15 @@ contract Configurator {
         emit EUSDMiningIncentivesChanged(addr, block.timestamp);
     }
 
-    /**
-     * @notice Enables or disables the repayment functionality for a asset pool.
-     * @param pool The address of the pool.
-     * @param isActive Boolean value indicating whether repayment is active or paused.
-     * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
-     */
-    function setvaultBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK) {
-        vaultBurnPaused[pool] = isActive;
+    function setVaultWeight(address vault, uint256 weight) external checkRole(TIMELOCK) {
+        require(mintVault[vault], "NV");
+        require(weight <= 2e20, "EL");
+        vaultWeight[vault] = weight;
+        emit VaultWeightChanged(vault, weight, block.timestamp);
+    }
+
+    function setEUSDOracle(address _eUSDOracle) external checkRole(TIMELOCK) {
+        eUSDPriceFeed = AggregatorV3Interface(_eUSDOracle);
     }
 
     /**
@@ -166,6 +178,16 @@ contract Configurator {
      */
     function setPremiumTradingEnabled(bool isActive) external checkRole(TIMELOCK) {
         premiumTradingEnabled = isActive;
+    }
+
+    /**
+     * @notice Enables or disables the repayment functionality for a asset pool.
+     * @param pool The address of the pool.
+     * @param isActive Boolean value indicating whether repayment is active or paused.
+     * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
+     */
+    function setvaultBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK) {
+        vaultBurnPaused[pool] = isActive;
     }
 
     /**
@@ -196,7 +218,7 @@ contract Configurator {
      * than the liquidation collateral rate, providing an additional buffer to protect against liquidation risks.
      */
     function setSafeCollateralRatio(address pool, uint256 newRatio) external checkRole(TIMELOCK) {
-        if(IVault(pool).vaultType() == 0) {
+        if(IVault(pool).getVaultType() == 0) {
             require(newRatio >= 160 * 1e18, "eUSD vault safe collateralRatio should more than 160%");
         } else {
             require(newRatio >= vaultBadCollateralRatio[pool] + 1e19, "PeUSD vault safe collateralRatio should more than bad collateralRatio");
@@ -244,7 +266,7 @@ contract Configurator {
      * @param _ratio The ratio in basis points (1/10_000). The maximum value is 10_000.
      */
     function setMaxStableRatio(uint256 _ratio) external checkRole(TIMELOCK) {
-        require(_ratio <= 10_000, "The maximum value is 10000");
+        require(_ratio <= 10_000, "The maximum value is 10_000");
         maxStableRatio = _ratio;
     }
 
@@ -254,12 +276,6 @@ contract Configurator {
         if (fee > 10_000) revert('EL');
         emit FlashloanFeeUpdated(fee);
         flashloanFee = fee;
-    }
-
-    /// @notice Sets the address of the stablecoin used for rewards distribution.
-    /// @param _token The address of the stablecoin token.
-    function setProtocolRewardsToken(address _token) external checkRole(TIMELOCK) {
-        stableToken = _token;
     }
 
     /**
@@ -279,31 +295,35 @@ contract Configurator {
     }
     
     /**
-     * @notice Distributes rewards to the LybraProtocolRewardsPool based on the available balance of eUSD.
+     * @notice Distributes rewards to the LybraProtocolRewardsPool based on the available balance of peUSD and eUSD. 
      * If the balance is greater than 1e21, the distribution process is triggered.
-     * If premiumTradingEnabled is false or the price of the trading pair (0, 2) on the Curve pool is less than or equal to 1005000, eUSD rewards are directly transferred to the LybraProtocolRewardsPool.
-     * Otherwise, a controlled premium trading is performed by exchanging eUSD for the third token in the trading pair on the Curve pool, using a calculated amount to maintain a premium.
-     * The resulting token amount is transferred to the LybraProtocolRewardsPool.
+     * 
+     * First, if the eUSD balance is greater than 1,000 and the premiumTradingEnabled flag is set to true, 
+     * and the eUSD/USDC premium exceeds 0.5%, eUSD will be exchanged for USDC and added to the LybraProtocolRewardsPool. 
+     * Otherwise, eUSD will be directly converted to peUSD, and the entire peUSD balance will be transferred to the LybraProtocolRewardsPool.
      * @dev The protocol rewards amount is notified to the LybraProtocolRewardsPool for proper reward allocation.
      */
     function distributeRewards() external {
+        uint256 balance = EUSD.balanceOf(address(this));
+        if (balance > 1e21) {
+            if(premiumTradingEnabled){
+                (, int price, , , ) = eUSDPriceFeed.latestRoundData();
+                if(price > 100_500_000){
+                    EUSD.approve(address(curvePool), balance);
+                    uint256 amount = curvePool.exchange_underlying(0, 2, balance, balance * uint(price) * 998 / 1e23);
+                    IERC20(stableToken).safeTransfer(address(lybraProtocolRewardsPool), amount);
+                    lybraProtocolRewardsPool.notifyRewardAmount(amount, 1);
+                    emit SendProtocolRewards(stableToken, amount, block.timestamp);
+                }
+            } else {
+                peUSD.convertToPeUSD(address(this), balance);
+            }
+        }
         uint256 peUSDBalance = peUSD.balanceOf(address(this));
         if(peUSDBalance >= 1e21) {
             peUSD.transfer(address(lybraProtocolRewardsPool), peUSDBalance);
-            lybraProtocolRewardsPool.notifyRewardAmount(peUSDBalance, 2);
-        }
-        uint256 balance = EUSD.balanceOf(address(this));
-        if (balance > 1e21) {
-            uint256 price = curvePool.get_dy_underlying(0, 2, 1e18);
-            if(!premiumTradingEnabled || price <= 1005000) {
-                EUSD.transfer(address(lybraProtocolRewardsPool), balance);
-                lybraProtocolRewardsPool.notifyRewardAmount(balance, 0);
-            } else {
-                EUSD.approve(address(curvePool), balance);
-                uint256 amount = curvePool.exchange_underlying(0, 2, balance, balance * price * 998 / 1e21);
-                IEUSD(stableToken).transfer(address(lybraProtocolRewardsPool), amount);
-                lybraProtocolRewardsPool.notifyRewardAmount(amount, 1);
-            }
+            lybraProtocolRewardsPool.notifyRewardAmount(peUSDBalance, 0);
+            emit SendProtocolRewards(address(peUSD), peUSDBalance, block.timestamp);
         }
     }
 
@@ -330,14 +350,21 @@ contract Configurator {
      */
     function getSafeCollateralRatio(
         address pool
-    ) external view returns (uint256) {
+    ) public view returns (uint256) {
         if (vaultSafeCollateralRatio[pool] == 0) return 160 * 1e18;
         return vaultSafeCollateralRatio[pool];
     }
 
     function getBadCollateralRatio(address pool) external view returns(uint256) {
-        if(vaultBadCollateralRatio[pool] == 0) return vaultSafeCollateralRatio[pool] - 1e19;
+        if(vaultBadCollateralRatio[pool] == 0) return getSafeCollateralRatio(pool) - 1e19;
         return vaultBadCollateralRatio[pool];
+    }
+
+    function getVaultWeight(
+        address pool
+    ) external view returns (uint256) {
+        if (vaultWeight[pool] == 0) return 100 * 1e18;
+        return vaultWeight[pool];
     }
 
     /**

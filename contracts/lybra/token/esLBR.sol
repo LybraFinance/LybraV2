@@ -3,7 +3,6 @@
 pragma solidity ^0.8.17;
 /**
  * @title esLBR is an ERC20-compliant token, but cannot be transferred and can only be minted through the esLBRMinter contract or redeemed for LBR by destruction.
- * - The maximum amount that can be minted through the esLBRMinter contract is 55 million.
  * - esLBR can be used for community governance voting.
  */
 
@@ -24,20 +23,22 @@ contract esLBR is ERC20Votes {
     }
 
     function _transfer(address, address, uint256) internal virtual override {
-        revert("not authorized");
+        revert("NA");
     }
 
     function mint(address user, uint256 amount) external returns (bool) {
-        require(configurator.tokenMiner(msg.sender), "not authorized");
+        require(amount != 0, "ZA");
+        require(configurator.tokenMiner(msg.sender), "NA");
         require(totalSupply() + amount <= maxSupply, "exceeding the maximum supply quantity.");
-        try IProtocolRewardsPool(configurator.getProtocolRewardsPool()).refreshReward(user) {} catch {}
+        IProtocolRewardsPool(configurator.getProtocolRewardsPool()).refreshReward(user);
         _mint(user, amount);
         return true;
     }
 
     function burn(address user, uint256 amount) external returns (bool) {
-        require(configurator.tokenMiner(msg.sender), "not authorized");
-        try IProtocolRewardsPool(configurator.getProtocolRewardsPool()).refreshReward(user) {} catch {}
+        require(amount != 0, "ZA");
+        require(configurator.tokenMiner(msg.sender), "NA");
+        IProtocolRewardsPool(configurator.getProtocolRewardsPool()).refreshReward(user);
         _burn(user, amount);
         return true;
     }

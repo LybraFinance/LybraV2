@@ -11,17 +11,18 @@ pragma solidity ^0.8.17;
  */
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../interfaces/IEUSD.sol";
 import "../interfaces/Iconfigurator.sol";
 import "../interfaces/IesLBR.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IesLBRBoost {
-    function getUnlockTime(
+    function userLockStatus(
         address user
-    ) external view returns (uint256 unlockTime);
+    ) external view returns (uint256, uint256, uint256, uint256);
 }
 
 contract ProtocolRewardsPool is Ownable {
+    using SafeERC20 for ERC20;
     Iconfigurator public immutable configurator;
     IesLBR public esLBR;
     IesLBR public LBR;
@@ -43,7 +44,7 @@ contract ProtocolRewardsPool is Ownable {
     event StakeLBR(address indexed user, uint256 amount, uint256 time);
     event UnstakeLBR(address indexed user, uint256 amount, uint256 time);
     event WithdrawLBR(address indexed user, uint256 amount, uint256 time);
-    event ClaimReward(address indexed user, uint256 eUSDAmount, address token, uint256 tokenAmount, uint256 time);
+    event ClaimReward(address indexed user, uint256 eUSDAmount, address indexed token, uint256 tokenAmount, uint256 time);
 
     constructor(address _config) {
         configurator = Iconfigurator(_config);
@@ -80,12 +81,16 @@ contract ProtocolRewardsPool is Ownable {
      * @dev Unlocks esLBR and converts it to LBR.
      * @param amount The amount to convert.
      * Requirements:
-     * The current time must be greater than the unlock time retrieved from the boost contract for the user.
+     * If the current time is less than the unlock time of the user's lock status in the esLBRBoost contract,
+     * the locked portion in the esLBRBoost contract cannot be unlocked.
      * Effects:
      * Resets the user's vesting data, entering a new vesting period, when converting to LBR.
      */
     function unstake(uint256 amount) external {
-        require(block.timestamp >= esLBRBoost.getUnlockTime(msg.sender), "Your lock-in period has not ended. You can't convert your esLBR now.");
+        (uint256 lockedAmount, uint256 unLockTime,,) = esLBRBoost.userLockStatus(msg.sender);
+        if(block.timestamp < unLockTime) {
+            require(esLBR.balanceOf(msg.sender) >= lockedAmount + amount, "UCE");
+        }
         esLBR.burn(msg.sender, amount);
         withdraw(msg.sender);
         uint256 total = amount;
@@ -126,12 +131,12 @@ contract ProtocolRewardsPool is Ownable {
      * @dev Purchase the accumulated amount of pre-claimed lost ESLBR in the contract using LBR.
      * @param amount The amount of ESLBR to be purchased.
      * Requirements:
-     * The amount must be greater than 0.
+     * The amount must be greater than 1e17.
      */
     function grabEsLBR(uint256 amount) external {
-        require(amount > 0, "QMG");
+        require(amount > 1e17, "QMG");
         grabableAmount -= amount;
-        LBR.burn(msg.sender, (amount * grabFeeRatio) / 10000);
+        LBR.burn(msg.sender, (amount * grabFeeRatio) / 10_000);
         esLBR.mint(msg.sender, amount);
     }
 
@@ -168,10 +173,6 @@ contract ProtocolRewardsPool is Ownable {
         return ((stakedOf(_account) * (rewardPerTokenStored - userRewardPerTokenPaid[_account])) / 1e18) + rewards[_account];
     }
 
-    function getClaimAbleUSD(address user) external view returns (uint256 amount) {
-        amount = IEUSD(configurator.getEUSDAddress()).getMintedEUSDByShares(earned(user));
-    }
-
     /**
      * @dev Call this function when deposit or withdraw ETH on Lybra and update the status of corresponding user.
      */
@@ -184,56 +185,47 @@ contract ProtocolRewardsPool is Ownable {
     function refreshReward(address _account) external updateReward(_account) {}
 
     /**
-     * @notice When claiming protocol rewards earnings, if there is a sufficient amount of eUSD in the ProtocolRewards Pool,
-     * the eUSD will be prioritized for distribution. Distributes earnings in the order of peUSD and other stablecoins if the eUSD balance is insufficient..
+     * @notice When claiming protocol rewards earnings, 
+     * peUSD will be prioritized for distribution if there is a sufficient amount of peUSD in the Protocol Rewards Pool. 
+     * If the peUSD balance is insufficient, earnings will be distributed in the order of other stablecoins such as USDC.
      */
     function getReward() external updateReward(msg.sender) {
         uint reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
-            IEUSD EUSD = IEUSD(configurator.getEUSDAddress());
-            uint256 balance = EUSD.sharesOf(address(this));
-            uint256 eUSDShare = balance >= reward ? reward : reward - balance;
-            EUSD.transferShares(msg.sender, eUSDShare);
-            if(reward > eUSDShare) {
-                ERC20 peUSD = ERC20(configurator.peUSD());
-                uint256 peUSDBalance = peUSD.balanceOf(address(this));
-                if(peUSDBalance >= reward - eUSDShare) {
-                    peUSD.transfer(msg.sender, reward - eUSDShare);
-                    emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(peUSD), reward - eUSDShare, block.timestamp);
-                } else {
-                    if(peUSDBalance > 0) {
-                        peUSD.transfer(msg.sender, peUSDBalance);
-                    }
-                    ERC20 token = ERC20(configurator.stableToken());
-                    uint256 tokenAmount = (reward - eUSDShare - peUSDBalance) * token.decimals() / 1e18;
-                    token.transfer(msg.sender, tokenAmount);
-                    emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(token), reward - eUSDShare, block.timestamp);
-                }
+            ERC20 peUSD = ERC20(configurator.peUSD());
+            uint256 balance = peUSD.balanceOf(address(this));
+            uint256 peUSDAmount = balance >= reward ? reward : balance;
+            peUSD.transfer(msg.sender, peUSDAmount);
+            if(reward > peUSDAmount) {
+                ERC20 token = ERC20(configurator.stableToken());
+                uint256 tokenAmount = (reward - peUSDAmount) * token.decimals() / 1e18;
+                token.safeTransfer(msg.sender, tokenAmount);
+                emit ClaimReward(msg.sender, peUSDAmount, address(token), reward - peUSDAmount, block.timestamp);
             } else {
-                emit ClaimReward(msg.sender, EUSD.getMintedEUSDByShares(eUSDShare), address(0), 0, block.timestamp);
+                emit ClaimReward(msg.sender, peUSDAmount, address(0), 0, block.timestamp);
             }
            
         }
     }
 
     /**
-     * @dev Receives stablecoin tokens sent by the configurator contract and records the protocol rewards accumulation per esLBR held.
+     * @notice Notifies the protocol rewards pool about the amount of rewards to be distributed and the token type.
      * @param amount The amount of rewards to be distributed.
-     * @param tokenType The type of token (0 for eUSD, 1 for other stablecoins, 2 for peUSD).
-     * @dev This function is called by the configurator contract to distribute rewards.
+     * @param tokenType The type of token (0 for peUSD, 1 for other stablecoins).
+     * Requirements:
+     * - The caller must be the configurator contract.
+     * - There must be staked tokens in the protocol rewards pool.
+     * - The amount must not be zero.
      * @dev When receiving stablecoin tokens other than eUSD, the decimals of the token are converted to 18 for consistent calculations.
      */
     function notifyRewardAmount(uint amount, uint tokenType) external {
-        require(msg.sender == address(configurator));
+        require(msg.sender == address(configurator), "NA");
         if (totalStaked() == 0) return;
-        require(amount > 0, "amount = 0");
-        if(tokenType == 0) {
-            uint256 share = IEUSD(configurator.getEUSDAddress()).getSharesByMintedEUSD(amount);
-            rewardPerTokenStored = rewardPerTokenStored + (share * 1e18) / totalStaked();
-        } else if(tokenType == 1) {
+        require(amount != 0, "amount = 0");
+        if(tokenType == 1) {
             ERC20 token = ERC20(configurator.stableToken());
-            rewardPerTokenStored = rewardPerTokenStored + (amount * 1e36 / token.decimals()) / totalStaked();
+            rewardPerTokenStored = rewardPerTokenStored + (amount * 1e36 / (10 ** token.decimals())) / totalStaked();
         } else {
             rewardPerTokenStored = rewardPerTokenStored + (amount * 1e18) / totalStaked();
         }

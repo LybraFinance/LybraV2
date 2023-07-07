@@ -1,10 +1,17 @@
 {
+  "name": "lybra-protocol",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test"
+  },
   "devDependencies": {
     "hardhat": "^2.14.0"
   },
   "dependencies": {
     "@chainlink/contracts": "^0.6.1",
+    "@layerzerolabs/solidity-examples": "^0.0.12",
     "@nomicfoundation/hardhat-toolbox": "^2.0.2",
-    "@openzeppelin/contracts": "^4.8.3"
+    "@openzeppelin/contracts": "^4.8.3",
+    "hardhat-gas-reporter": "^1.0.9"
   }
 }

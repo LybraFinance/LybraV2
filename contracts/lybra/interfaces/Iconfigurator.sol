@@ -10,6 +10,7 @@ interface Iconfigurator {
     function tokenMiner(address pool) external view returns(bool);
     function getSafeCollateralRatio(address pool) external view returns(uint256);
     function getBadCollateralRatio(address pool) external view returns(uint256);
+    function getVaultWeight(address pool) external view returns (uint256);
     function vaultMintFeeApy(address pool) external view returns(uint256);
     function vaultKeeperRatio(address pool) external view returns(uint256);
     function redemptionFee() external view returns(uint256);

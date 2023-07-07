@@ -4,6 +4,7 @@ pragma solidity ^0.8;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IesLBR.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IesLBRBoost {
     function getUserBoost(
@@ -14,6 +15,7 @@ interface IesLBRBoost {
 }
 
 contract StakingRewardsV2 is Ownable {
+    using SafeERC20 for IERC20;
     // Immutable variables for staking and rewards tokens
     IERC20 public immutable stakingToken;
     IesLBR public immutable rewardsToken;
@@ -81,9 +83,8 @@ contract StakingRewardsV2 is Ownable {
 
     // Allows users to stake a specified amount of tokens
     function stake(uint256 _amount) external updateReward(msg.sender) {
-        require(_amount > 0, "amount = 0");
-        bool success = stakingToken.transferFrom(msg.sender, address(this), _amount);
-        require(success, "TF");
+        require(_amount != 0, "amount = 0");
+        stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
         balanceOf[msg.sender] += _amount;
         totalSupply += _amount;
         emit StakeToken(msg.sender, _amount, block.timestamp);
@@ -91,10 +92,10 @@ contract StakingRewardsV2 is Ownable {
 
     // Allows users to withdraw a specified amount of staked tokens
     function withdraw(uint256 _amount) external updateReward(msg.sender) {
-        require(_amount > 0, "amount = 0");
+        require(_amount != 0, "amount = 0");
         balanceOf[msg.sender] -= _amount;
         totalSupply -= _amount;
-        stakingToken.transfer(msg.sender, _amount);
+        stakingToken.safeTransfer(msg.sender, _amount);
         emit WithdrawToken(msg.sender, _amount, block.timestamp);
     }
 
@@ -137,7 +138,7 @@ contract StakingRewardsV2 is Ownable {
             rewardRatio = (_amount + remainingRewards) / duration;
         }
 
-        require(rewardRatio > 0, "reward ratio = 0");
+        require(rewardRatio != 0, "reward ratio = 0");
 
         finishAt = block.timestamp + duration;
         updatedAt = block.timestamp;

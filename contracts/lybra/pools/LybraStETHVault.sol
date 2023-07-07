@@ -15,7 +15,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
 
     // stETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84
     // oracle = 0x4c517D4e2C851CA76d7eC94B805269Df0f2201De
-    constructor(address _config, address _stETH, address _oracle) LybraEUSDVaultBase(_stETH, _oracle, _config) {
+    constructor(address _stETH, address _oracle, address _config) LybraEUSDVaultBase(_stETH, _oracle, _config) {
     }
 
     /**
@@ -23,7 +23,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
      * This function can only be called by an address with the ADMIN role.
      */
     function setLidoRebaseTime(uint256 _time) external {
-        require(configurator.hasRole(keccak256("ADMIN"), msg.sender), "not authorized");
+        require(configurator.hasRole(keccak256("ADMIN"), msg.sender), "NA");
         lidoRebaseTime = _time;
     }
 
@@ -38,7 +38,7 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
         require(msg.value >= 1 ether, "DNL");
         //convert to steth
         uint256 sharesAmount = Ilido(address(collateralAsset)).submit{value: msg.value}(address(configurator));
-        require(sharesAmount > 0, "ZERO_DEPOSIT");
+        require(sharesAmount != 0, "ZERO_DEPOSIT");
 
         totalDepositedAsset += msg.value;
         depositedAsset[msg.sender] += msg.value;
@@ -61,9 +61,9 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
      */
     function excessIncomeDistribution(uint256 stETHAmount) external override {
         uint256 excessAmount = collateralAsset.balanceOf(address(this)) - totalDepositedAsset;
-        require(excessAmount > 0 && stETHAmount > 0, "Only LSD excess income can be exchanged");
+        require(excessAmount != 0 && stETHAmount != 0, "Only LSD excess income can be exchanged");
         uint256 realAmount = stETHAmount > excessAmount ? excessAmount : stETHAmount;
-        uint256 payAmount = (((realAmount * getAssetPrice()) / 1e18) * getDutchAuctionDiscountPrice()) / 10000;
+        uint256 payAmount = (((realAmount * getAssetPrice()) / 1e18) * getDutchAuctionDiscountPrice()) / 10_000;
 
         uint256 income = feeStored + _newFee();
         if (payAmount > income) {
@@ -100,11 +100,14 @@ contract LybraStETHDepositVault is LybraEUSDVaultBase {
      */
     function getDutchAuctionDiscountPrice() public view returns (uint256) {
         uint256 time = (block.timestamp - lidoRebaseTime) % 1 days;
-        if (time < 30 minutes) return 10000;
-        return 10000 - (time / 30 minutes - 1) * 100;
+        if (time < 30 minutes) return 10_000;
+        return 10_000 - (time / 30 minutes - 1) * 100;
     }
 
     function getAssetPrice() public override returns (uint256) {
         return _etherPrice();
+    }
+    function getAsset2EtherExchangeRate() external view override returns (uint256) {
+        return 1e18;
     }
 }

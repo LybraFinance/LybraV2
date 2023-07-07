@@ -2,11 +2,10 @@
 
 pragma solidity ^0.8.17;
 /**
- * @title tokenMiner is a stripped down version of Synthetix StakingRewards.sol, to reward esLBR to EUSD minters.
+ * @title EUSDMiningIncentives is a stripped down version of Synthetix StakingRewards.sol, to reward esLBR to eUSD&peUSD minters.
  * Differences from the original contract,
- * - Get `totalStaked` from totalSupply() in contract EUSD.
- * - Get `stakedOf(user)` from getBorrowedOf(user) in contract EUSD.
- * - When an address borrowed EUSD amount changes, call the refreshReward method to update rewards to be claimed.
+ * - totalStaked and stakedOf(user) are different from the original version.
+ * - When a user's borrowing changes in any of the Lst vaults, the `refreshReward()` function needs to be called to update the data.
  */
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -30,7 +29,8 @@ contract EUSDMiningIncentives is Ownable {
     IEUSD public immutable EUSD;
     address public esLBR;
     address public LBR;
-    address[] public pools;
+    address public wETH;
+    address[] public vaults;
 
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 2_592_000;
@@ -47,26 +47,29 @@ contract EUSDMiningIncentives is Ownable {
     // User address => rewards to be claimed
     mapping(address => uint256) public rewards;
     mapping(address => uint256) public userUpdatedAt;
-    uint256 public extraRatio = 50 * 1e18;
-    uint256 public peUSDExtraRatio = 10 * 1e18;
+    uint256 public extraRatio = 10 * 1e18;
     uint256 public biddingFeeRatio = 3000;
     address public ethlbrStakePool;
     address public ethlbrLpToken;
+    uint256 public minDlpRatio = 500;
     AggregatorV3Interface internal etherPriceFeed;
     AggregatorV3Interface internal lbrPriceFeed;
     bool public isEUSDBuyoutAllowed = true;
+    bool public v1Supported;
+    address immutable oldLybra = 0x97de57eC338AB5d51557DA3434828C5DbFaDA371;
 
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
     event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, bool useEUSD, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
     //etherOracle = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-    constructor(address _config, address _boost, address _etherOracle, address _lbrOracle) {
+    //wETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+    constructor(address _config, address _etherOracle, address _lbrOracle, address _weth) {
         configurator = Iconfigurator(_config);
-        esLBRBoost = IesLBRBoost(_boost);
         EUSD = IEUSD(configurator.getEUSDAddress());
         etherPriceFeed = AggregatorV3Interface(_etherOracle);
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
+        wETH = _weth;
     }
 
     modifier updateReward(address _account) {
@@ -90,11 +93,12 @@ contract EUSDMiningIncentives is Ownable {
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
     }
 
-    function setPools(address[] memory _pools) external onlyOwner {
-        for (uint i = 0; i < _pools.length; i++) {
-            require(configurator.mintVault(_pools[i]), "NOT_VAULT");
+    function setPools(address[] memory _vaults) external onlyOwner {
+        require(_vaults.length <= 10, "EL");
+        for (uint i = 0; i < _vaults.length; i++) {
+            require(configurator.mintVault(_vaults[i]), "NOT_VAULT");
         }
-        pools = _pools;
+        vaults = _vaults;
     }
 
     function setBiddingCost(uint256 _biddingRatio) external onlyOwner {
@@ -107,13 +111,17 @@ contract EUSDMiningIncentives is Ownable {
         extraRatio = ratio;
     }
 
-    function setPeUSDExtraRatio(uint256 ratio) external onlyOwner {
-        require(ratio <= 1e20, "BCE");
-        peUSDExtraRatio = ratio;
+    function setMinDlpRatio(uint256 ratio) external onlyOwner {
+        require(ratio <= 1_000, "BCE");
+        minDlpRatio = ratio;
     }
 
     function setBoost(address _boost) external onlyOwner {
         esLBRBoost = IesLBRBoost(_boost);
+    }
+
+    function setV1Supported(bool _bool) external onlyOwner {
+        v1Supported = _bool;
     }
 
     function setRewardsDuration(uint256 _duration) external onlyOwner {
@@ -129,28 +137,51 @@ contract EUSDMiningIncentives is Ownable {
         isEUSDBuyoutAllowed = _bool;
     }
 
-    function totalStaked() internal view returns (uint256) {
-        return EUSD.totalSupply();
-    }
-
-    function stakedOf(address user) public view returns (uint256) {
+    /**
+     * @notice Returns the total amount of minted eUSD&peUSD in the asset pools.
+     * @return The total amount of minted eUSD&peUSD.
+     * @dev It iterates through the vaults array and retrieves the total circulation of each asset pool using the getPoolTotalCirculation()
+     * function from the ILybra interface. The total staked amount is calculated by multiplying the total circulation by the vault's
+     * weight (obtained from configurator.getVaultWeight()). 
+     */
+    function totalStaked() public view returns (uint256) {
         uint256 amount;
-        for (uint i = 0; i < pools.length; i++) {
-            ILybra pool = ILybra(pools[i]);
-            uint borrowed = pool.getBorrowedOf(user);
-            if (pool.getVaultType() == 1) {
-                borrowed = borrowed * (1e20 + peUSDExtraRatio) / 1e20;
-            }
-            amount += borrowed;
+        for (uint i = 0; i < vaults.length; i++) {
+            ILybra vault = ILybra(vaults[i]);
+            amount += vault.getPoolTotalCirculation() * configurator.getVaultWeight(vaults[i]) / 1e20;
+        }
+        if(v1Supported) {
+            amount += IEUSD(oldLybra).totalSupply() * configurator.getVaultWeight(oldLybra) / 1e20;
         }
         return amount;
     }
 
+    /**
+     * @notice Returns the total amount of borrowed eUSD and PeUSD by the user.
+     */
+    function stakedOf(address user) public view returns (uint256) {
+        uint256 amount;
+        for (uint i = 0; i < vaults.length; i++) {
+            ILybra vault = ILybra(vaults[i]);
+            amount += vault.getBorrowedOf(user) * configurator.getVaultWeight(vaults[i]) / 1e20;
+        }
+        if(v1Supported) {
+            amount += ILybra(oldLybra).getBorrowedOf(user) * configurator.getVaultWeight(oldLybra) / 1e20;
+        }
+        return amount;
+    }
+
+    /**
+     * @notice Returns the value of the user's staked LP tokens in the ETH-LBR liquidity pool.
+     * @param user The user's address.
+     * @return The value of the user's staked LP tokens in ETH and LBR.
+     */
     function stakedLBRLpValue(address user) public view returns (uint256) {
         uint256 totalLp = IEUSD(ethlbrLpToken).totalSupply();
+        if(totalLp == 0) return 0;
         (, int etherPrice, , , ) = etherPriceFeed.latestRoundData();
         (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
-        uint256 etherInLp = (IEUSD(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2).balanceOf(ethlbrLpToken) * uint(etherPrice)) / 1e8;
+        uint256 etherInLp = (IEUSD(wETH).balanceOf(ethlbrLpToken) * uint(etherPrice)) / 1e8;
         uint256 lbrInLp = (IEUSD(LBR).balanceOf(ethlbrLpToken) * uint(lbrPrice)) / 1e8;
         uint256 userStaked = IEUSD(ethlbrStakePool).balanceOf(user);
         return (userStaked * (lbrInLp + etherInLp)) / totalLp;
@@ -185,8 +216,15 @@ contract EUSDMiningIncentives is Ownable {
         return ((stakedOf(_account) * getBoost(_account) * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
     }
 
+    /**
+     * @notice Checks if the user's earnings can be claimed by others.
+     * @param user The user's address.
+     * @return  A boolean indicating if the user's earnings can be claimed by others.
+     */
     function isOtherEarningsClaimable(address user) public view returns (bool) {
-        return (stakedLBRLpValue(user) * 10000) / stakedOf(user) < 500;
+        uint256 staked = stakedOf(user);
+        if(staked == 0) return true;
+        return (stakedLBRLpValue(user) * 10_000) / staked < minDlpRatio;
     }
 
     function getReward() external updateReward(msg.sender) {
@@ -199,34 +237,48 @@ contract EUSDMiningIncentives is Ownable {
         }
     }
 
-    function purchaseOtherEarnings(address user, bool useEUSD) external updateReward(user) {
+    /**
+     * @notice Purchasing the esLBR earnings from users who have insufficient DLP.
+     * @param user The address of the user whose earnings will be purchased.
+     * @param useEUSD Boolean indicating if the purchase will be made using EUSD.
+     * Requirements:
+     * The user's earnings must be claimable by others.
+     * If using EUSD, the purchase must be permitted.
+     * The user must have non-zero rewards.
+     * If using EUSD, the caller must have sufficient EUSD balance and allowance.
+     */
+    function _buyOtherEarnings(address user, bool useEUSD) internal updateReward(user) {
         require(isOtherEarningsClaimable(user), "The rewards of the user cannot be bought out");
+        require(rewards[user] != 0, "ZA");
         if(useEUSD) {
             require(isEUSDBuyoutAllowed, "The purchase using EUSD is not permitted.");
         }
         uint256 reward = rewards[user];
-        if (reward > 0) {
-            rewards[user] = 0;
-            uint256 biddingFee = (reward * biddingFeeRatio) / 10000;
-            if(useEUSD) {
-                (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
-                biddingFee = biddingFee * uint256(lbrPrice) / 1e8;
-                bool success = EUSD.transferFrom(msg.sender, address(configurator), biddingFee);
-                require(success, "TF");
-                try configurator.distributeRewards() {} catch {}
-            } else {
-                IesLBR(LBR).burn(msg.sender, biddingFee);
-            }
-            IesLBR(esLBR).mint(msg.sender, reward);
+        rewards[user] = 0;
+        uint256 biddingFee = (reward * biddingFeeRatio) / 10_000;
+        if(useEUSD) {
+            (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
+            biddingFee = biddingFee * uint256(lbrPrice) / 1e8;
+            bool success = EUSD.transferFrom(msg.sender, address(configurator), biddingFee);
+            require(success, "TF");
+            try configurator.distributeRewards() {} catch {}
+        } else {
+            IesLBR(LBR).burn(msg.sender, biddingFee);
+        }
+        IesLBR(esLBR).mint(msg.sender, reward);
+        emit ClaimedOtherEarnings(msg.sender, user, reward, biddingFee, useEUSD, block.timestamp);
+    }
 
-            emit ClaimedOtherEarnings(msg.sender, user, reward, biddingFee, useEUSD, block.timestamp);
+    function buyOthersEarnings(address[] memory users, bool useEUSD) external {
+        for(uint256 i; i < users.length; i++) {
+            _buyOtherEarnings(users[i], useEUSD);
         }
     }
 
     function notifyRewardAmount(
         uint256 amount
     ) external onlyOwner updateReward(address(0)) {
-        require(amount > 0, "amount = 0");
+        require(amount != 0, "amount = 0");
         if (block.timestamp >= finishAt) {
             rewardRatio = amount / duration;
         } else {
@@ -234,7 +286,7 @@ contract EUSDMiningIncentives is Ownable {
             rewardRatio = (amount + remainingRewards) / duration;
         }
 
-        require(rewardRatio > 0, "reward ratio = 0");
+        require(rewardRatio != 0, "reward ratio = 0");
 
         finishAt = block.timestamp + duration;
         updatedAt = block.timestamp;

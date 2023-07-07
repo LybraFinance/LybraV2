@@ -15,10 +15,8 @@ contract LybraGovernance is GovernorTimelockControl {
     struct Receipt {
         /// @notice Whether or not a vote has been cast
         bool hasVoted;
-
         /// @notice Whether or not the voter supports the proposal or abstains
         uint8 support;
-
         /// @notice The number of votes the voter had, which were cast
         uint256 votes;
     }
@@ -31,17 +29,21 @@ contract LybraGovernance is GovernorTimelockControl {
     }
 
     mapping (uint256 => ProposalExtraData) public proposalData;
+
+    enum VoteType {
+        Against,
+        For,
+        Abstain
+    }
      
 
-
-        // TimelockController timelockAddress;
-      constructor(string memory name_, TimelockController timelock_, address _esLBR) GovernorTimelockControl(timelock_)  Governor(name_) {
-        // timelock = timelock_;
+    // TimelockController timelockAddress;
+    constructor(string memory name_, TimelockController timelock_, address _esLBR) GovernorTimelockControl(timelock_)  Governor(name_) {
         esLBR = IesLBR(_esLBR);
         GovernanceTimelock = IGovernanceTimelock(address(timelock_));
     }
 
-      /**
+    /**
      * @notice module:user-config
      * @dev Minimum number of cast voted required for a proposal to be successful.
      *
@@ -49,7 +51,7 @@ contract LybraGovernance is GovernorTimelockControl {
      * quorum depending on values such as the totalSupply of a token at this timepoint (see {ERC20Votes}).
      */
     function quorum(uint256 timepoint) public view override returns (uint256){
-        return esLBR.getPastTotalSupply(timepoint) / 3;
+        return esLBR.getPastTotalSupply(timepoint) * 4 / 100;
     }
 
     
@@ -57,38 +59,39 @@ contract LybraGovernance is GovernorTimelockControl {
      * @dev Amount of votes already cast passes the threshold limit.
      */
     function _quorumReached(uint256 proposalId) internal view override returns (bool){
-        return proposalData[proposalId].supportVotes[1] + proposalData[proposalId].supportVotes[2] >= quorum(proposalSnapshot(proposalId));
+        mapping(uint8 => uint256) storage supportVotes = proposalData[proposalId].supportVotes;
+        uint256 forVotes = supportVotes[uint8(VoteType.For)];
+        uint256 abstainVotes = supportVotes[uint8(VoteType.Abstain)];
+        return forVotes + abstainVotes >= quorum(proposalSnapshot(proposalId));
     }
 
-       /**
+    /**
      * @dev Is the proposal successful or not.
      */
     function _voteSucceeded(uint256 proposalId) internal view override returns (bool){
-        return proposalData[proposalId].supportVotes[1] > proposalData[proposalId].supportVotes[0];
+        mapping(uint8 => uint256) storage supportVotes = proposalData[proposalId].supportVotes;
+        uint256 forVotes = supportVotes[uint8(VoteType.For)];
+        uint256 againstVotes = supportVotes[uint8(VoteType.Against)];
+        return forVotes > againstVotes;
     }
 
-       /**
+    /**
      * @dev Register a vote for `proposalId` by `account` with a given `support`, voting `weight` and voting `params`.
      *
      * Note: Support is generic and can represent various things depending on the voting system used.
      */
 
     function _countVote(uint256 proposalId, address account, uint8 support, uint256 weight, bytes memory) internal override {
-      
         require(state(proposalId) == ProposalState.Active, "GovernorBravo::castVoteInternal: voting is closed");
         require(support <= 2, "GovernorBravo::castVoteInternal: invalid vote type");
         ProposalExtraData storage proposalExtraData = proposalData[proposalId];
         Receipt storage receipt = proposalExtraData.receipts[account];
         require(receipt.hasVoted == false, "GovernorBravo::castVoteInternal: voter already voted");
-        
         proposalExtraData.supportVotes[support] += weight;
-       
-
         receipt.hasVoted = true;
         receipt.support = support;
         receipt.votes = weight;
         proposalExtraData.totalVotes += weight;
-        
     }
 
     /**
@@ -104,32 +107,32 @@ contract LybraGovernance is GovernorTimelockControl {
      * @dev Overridden execute function that run the already queued proposal through the timelock.
      */
     function _execute(uint256 /* proposalId */, address[] memory targets, uint256[] memory values, bytes[] memory calldatas, bytes32 descriptionHash) internal virtual override {
-        require(GovernanceTimelock.checkOnlyRole(keccak256("TIMELOCK"), msg.sender), "not authorized");
+        require(GovernanceTimelock.checkOnlyRole(keccak256("TIMELOCK"), msg.sender), "NA");
         super._execute(1, targets, values, calldatas, descriptionHash);
         // _timelock.executeBatch{value: msg.value}(targets, values, calldatas, 0, descriptionHash);
     }
 
     function proposals(uint256 proposalId) external view returns (uint256 id, address proposer, uint256 eta, uint256 startBlock, uint256 endBlock, uint256 forVotes, uint256 againstVotes, uint256 abstainVotes, bool canceled, bool executed) {
+        mapping(uint8 => uint256) storage supportVotes = proposalData[proposalId].supportVotes;
         id = proposalId;
+        proposer = proposalProposer(proposalId);
         eta = proposalEta(proposalId);
         startBlock = proposalSnapshot(proposalId);
         endBlock = proposalDeadline(proposalId);
-
-        proposer = proposalProposer(proposalId);
-        
-        forVotes =  proposalData[proposalId].supportVotes[0];
-        againstVotes =  proposalData[proposalId].supportVotes[1];
-        abstainVotes =  proposalData[proposalId].supportVotes[2];
-
+        forVotes = supportVotes[uint8(VoteType.For)];
+        againstVotes = supportVotes[uint8(VoteType.Against)];
+        abstainVotes = supportVotes[uint8(VoteType.Abstain)];
         ProposalState currentState = state(proposalId);
         canceled = currentState == ProposalState.Canceled;
         executed = currentState == ProposalState.Executed;
     }
 
-    function getReceipt(uint256 proposalId, address account) external view returns (bool voted, uint8 support, uint256 votes){  
-        voted = proposalData[proposalId].receipts[account].hasVoted;
-        support = proposalData[proposalId].receipts[account].support;
-        votes = proposalData[proposalId].receipts[account].votes;
+    function getReceipt(uint256 proposalId, address account) external view returns (bool voted, uint8 support, uint256 votes){
+        ProposalExtraData storage proposalExtraData = proposalData[proposalId];
+        Receipt storage receipt = proposalExtraData.receipts[account];
+        voted = receipt.hasVoted;
+        support = receipt.support;
+        votes = receipt.votes;
     }
 
     /**
@@ -141,11 +144,11 @@ contract LybraGovernance is GovernorTimelockControl {
      * duration compared to the voting delay.
      */
     function votingPeriod() public pure override returns (uint256){
-         return 3;
+        return 50400; // 1 week
     }
 
      function votingDelay() public pure override returns (uint256){
-         return 1;
+        return 14400; // 2 days
     }
 
      function CLOCK_MODE() public override view returns (string memory){

@@ -13,12 +13,11 @@
 
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../../OFT/BaseOFTV2.sol";
 import "../interfaces/Iconfigurator.sol";
 import "../interfaces/IEUSD.sol";
+import "@layerzerolabs/solidity-examples/contracts/token/oft/v2/OFTV2.sol";
 
-interface FlashBorrower {
+interface IFlashBorrower {
     /// @notice Flash loan callback
     /// @param amount The amount of tokens received
     /// @param data Forwarded data from the flash loan request
@@ -26,10 +25,9 @@ interface FlashBorrower {
     function onFlashLoan(uint256 amount, bytes calldata data) external;
 }
 
-contract PeUSDMainnet is BaseOFTV2, ERC20 {
+contract PeUSDMainnet is OFTV2 {
     IEUSD public immutable EUSD;
     Iconfigurator public immutable configurator;
-    uint internal immutable ld2sdRatio;
     mapping(address => ConvertInfo) public userConvertInfo;
 
     struct ConvertInfo {
@@ -37,7 +35,7 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
         uint256 mintedPeUSD;
     }
 
-    event Flashloaned(FlashBorrower indexed receiver, uint256 borrowShares, uint256 burnAmount);
+    event Flashloaned(address indexed receiver, uint256 borrowShares, uint256 burnAmount);
 
     modifier onlyMintVault() {
         require(configurator.mintVault(msg.sender), "RCP");
@@ -52,12 +50,9 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
         _;
     }
 
-    constructor(address _config, uint8 _sharedDecimals, address _lzEndpoint) ERC20("peg-eUSD", "PeUSD") BaseOFTV2(_sharedDecimals, _lzEndpoint) {
+    constructor(address _eusd, address _config, uint8 _sharedDecimals, address _lzEndpoint) OFTV2("peg-eUSD", "PeUSD", _sharedDecimals, _lzEndpoint) {
         configurator = Iconfigurator(_config);
-        EUSD = IEUSD(configurator.getEUSDAddress());
-        uint8 decimals = decimals();
-        require(_sharedDecimals <= decimals, "OFT: sharedDecimals must be <= decimals");
-        ld2sdRatio = 10 ** (decimals - _sharedDecimals);
+        EUSD = IEUSD(_eusd);
     }
 
     function mint(address to, uint256 amount) external onlyMintVault MintPaused returns (bool) {
@@ -78,6 +73,7 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
      */
     function convertToPeUSD(address user, uint256 eusdAmount) public {
         require(_msgSender() == user || _msgSender() == address(this), "MDM");
+        require(eusdAmount != 0, "ZA");
         require(EUSD.balanceOf(address(this)) + eusdAmount <= configurator.getEUSDMaxLocked(),"ESL");
         bool success = EUSD.transferFrom(user, address(this), eusdAmount);
         require(success, "TF");
@@ -112,7 +108,7 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
      * The user's `mintedPeUSD` must be greater than or equal to `peusdAmount`.
      */
     function convertToEUSD(uint256 peusdAmount) external {
-        require(peusdAmount <= userConvertInfo[msg.sender].mintedPeUSD &&peusdAmount > 0, "PCE");
+        require(peusdAmount <= userConvertInfo[msg.sender].mintedPeUSD &&peusdAmount != 0, "PCE");
         _burn(msg.sender, peusdAmount);
         uint256 share = (userConvertInfo[msg.sender].depositedEUSDShares * peusdAmount) / userConvertInfo[msg.sender].mintedPeUSD;
         userConvertInfo[msg.sender].mintedPeUSD -= peusdAmount;
@@ -126,7 +122,8 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
      * @param eusdAmount The amount of eUSD to lend out.
      * @param data The data to be passed to the receiver contract for execution.
      */
-    function executeFlashloan(FlashBorrower receiver, uint256 eusdAmount, bytes calldata data) public payable {
+    function executeFlashloan(IFlashBorrower receiver, uint256 eusdAmount, bytes calldata data) public {
+        require(address(receiver) != address(this), "NA");
         uint256 shareAmount = EUSD.getSharesByMintedEUSD(eusdAmount);
         EUSD.transferShares(address(receiver), shareAmount);
         receiver.onFlashLoan(shareAmount, data);
@@ -134,8 +131,8 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
         require(success, "TF");
 
         uint256 burnShare = getFee(shareAmount);
-        EUSD.burnShares(address(receiver), burnShare);
-        emit Flashloaned(receiver, eusdAmount, burnShare);
+        EUSD.burnShares(msg.sender, burnShare);
+        emit Flashloaned(address(receiver), eusdAmount, burnShare);
     }
 
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
@@ -160,49 +157,11 @@ contract PeUSDMainnet is BaseOFTV2, ERC20 {
     /**
      * @dev Returns the interest of eUSD locked by the user.
      * @param user The address of the user.
-     * @return eusdAmount The interest earned by the user.
+     * @return The interest earned by the user.
      */
     function getAccruedEUSDInterest(
         address user
-    ) public view returns (uint256 eusdAmount) {
+    ) public view returns (uint256) {
         return EUSD.getMintedEUSDByShares(userConvertInfo[user].depositedEUSDShares) - userConvertInfo[user].mintedPeUSD;
-    }
-
-    function circulatingSupply() public view virtual override returns (uint) {
-        return totalSupply();
-    }
-
-    function token() public view virtual override returns (address) {
-        return address(this);
-    }
-
-    /************************************************************************
-     * internal functions
-     * @dev The following functions are internal functions of Layer Zero OFT, used for internal calls during cross-chain operations.
-     ************************************************************************/
-
-    function _debitFrom(address _from, uint16, bytes32, uint _amount) internal virtual override returns (uint) {
-        address spender = _msgSender();
-        if (_from != spender) _spendAllowance(_from, spender, _amount);
-        _burn(_from, _amount);
-        return _amount;
-    }
-
-    function _creditTo(uint16, address _toAddress, uint _amount) internal virtual override returns (uint) {
-        _mint(_toAddress, _amount);
-        return _amount;
-    }
-
-    function _transferFrom(address _from, address _to, uint _amount) internal virtual override returns (uint) {
-        address spender = _msgSender();
-        // if transfer from this contract, no need to check allowance
-        if (_from != address(this) && _from != spender)
-            _spendAllowance(_from, spender, _amount);
-        _transfer(_from, _to, _amount);
-        return _amount;
-    }
-
-    function _ld2sdRatio() internal view virtual override returns (uint) {
-        return ld2sdRatio;
     }
 }

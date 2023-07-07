@@ -93,19 +93,24 @@ contract stETHMock is IERC20 {
         updateTime = block.timestamp;
     }
 
-    function mintEther() external {
-        uint256 sharesAmount = getSharesByPooledEth(1e19);
+    function submit(address user) external payable returns(uint256) {
+        uint256 sharesAmount = getSharesByPooledEth(msg.value);
 
         _mintShares(msg.sender, sharesAmount);
-        totalEther = _getTotalMintedEUSD() + 1e19;
+        totalEther = _getTotalMintedEUSD() + msg.value;
         updateTime = block.timestamp;
+        return sharesAmount;
+    }
+
+    function claimTestStETH() external {
+        _mintShares(msg.sender, 100 * 1e18);
     }
 
     /**
      * @dev mock stETH are expanding at a ratio of 1% a day
      */
     function _getTotalMintedEUSD() internal view returns (uint256) {
-        return totalEther + totalEther * (block.timestamp - updateTime) / 100 days ;
+        return totalEther + totalEther * (block.timestamp - updateTime) / 365 / 20 days ;
     }
 
     /**

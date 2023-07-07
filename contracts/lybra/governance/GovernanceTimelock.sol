@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
 
 
 contract GovernanceTimelock is TimelockController {
-    // contructor()
     bytes32 public constant DAO = keccak256("DAO");
     bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
     bytes32 public constant ADMIN = keccak256("ADMIN");
