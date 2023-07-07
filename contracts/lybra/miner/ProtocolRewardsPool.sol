@@ -14,6 +14,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/Iconfigurator.sol";
 import "../interfaces/IesLBR.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 interface IesLBRBoost {
     function userLockStatus(
@@ -27,7 +28,7 @@ contract ProtocolRewardsPool is Ownable {
     IesLBR public esLBR;
     IesLBR public LBR;
     IesLBRBoost public esLBRBoost;
-
+    AggregatorV3Interface internal lbrPriceFeed;
     // Sum of (reward ratio * dt * 1e18 / total supply)
     uint public rewardPerTokenStored;
     // User address => rewardPerTokenStored
@@ -45,20 +46,26 @@ contract ProtocolRewardsPool is Ownable {
     event UnstakeLBR(address indexed user, uint256 amount, uint256 time);
     event WithdrawLBR(address indexed user, uint256 amount, uint256 time);
     event ClaimReward(address indexed user, uint256 eUSDAmount, address indexed token, uint256 tokenAmount, uint256 time);
+    event GrabEsLBR(address indexed user, uint256 esLBRAmount, uint256 payAmount, bool useEUSD, uint256 time);
 
     constructor(address _config) {
         configurator = Iconfigurator(_config);
     }
 
-    function setTokenAddress(address _eslbr, address _lbr, address _boost) external onlyOwner {
+    function setTokenAddress(address _eslbr, address _lbr, address _boost, address _lbrOracle) external onlyOwner {
         esLBR = IesLBR(_eslbr);
         LBR = IesLBR(_lbr);
         esLBRBoost = IesLBRBoost(_boost);
+        lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
     }
 
     function setGrabCost(uint256 _ratio) external onlyOwner {
         require(_ratio <= 8000, "BCE");
         grabFeeRatio = _ratio;
+    }
+
+    function setLBROracle(address _lbrOracle) external onlyOwner {
+        lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
     }
 
     // Total staked
@@ -128,16 +135,25 @@ contract ProtocolRewardsPool is Ownable {
     }
 
     /**
-     * @dev Purchase the accumulated amount of pre-claimed lost ESLBR in the contract using LBR.
+     * @dev Purchase the accumulated amount of pre-claimed lost ESLBR in the contract using LBR or eUSD.
      * @param amount The amount of ESLBR to be purchased.
      * Requirements:
      * The amount must be greater than 1e17.
      */
-    function grabEsLBR(uint256 amount) external {
+    function grabEsLBR(uint256 amount, bool useEUSD) external {
         require(amount > 1e17, "QMG");
         grabableAmount -= amount;
-        LBR.burn(msg.sender, (amount * grabFeeRatio) / 10_000);
+        uint256 payAmount = amount * grabFeeRatio / 10_000;
+        if(useEUSD) {
+            (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
+            payAmount = payAmount * uint256(lbrPrice) / 1e8;
+            bool success = ERC20(configurator.getEUSDAddress()).transferFrom(msg.sender, address(owner()), payAmount);
+            require(success, "TF");
+        } else {
+            LBR.burn(msg.sender, payAmount);
+        }
         esLBR.mint(msg.sender, amount);
+        emit GrabEsLBR(msg.sender, amount, payAmount, useEUSD, block.timestamp);
     }
 
     /**

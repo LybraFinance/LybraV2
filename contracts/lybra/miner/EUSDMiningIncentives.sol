@@ -259,9 +259,8 @@ contract EUSDMiningIncentives is Ownable {
         if(useEUSD) {
             (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
             biddingFee = biddingFee * uint256(lbrPrice) / 1e8;
-            bool success = EUSD.transferFrom(msg.sender, address(configurator), biddingFee);
+            bool success = EUSD.transferFrom(msg.sender, address(owner()), biddingFee);
             require(success, "TF");
-            try configurator.distributeRewards() {} catch {}
         } else {
             IesLBR(LBR).burn(msg.sender, biddingFee);
         }
