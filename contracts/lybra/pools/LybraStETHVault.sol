@@ -9,7 +9,7 @@ interface Ilido {
     function submit(address _referral) external payable returns (uint256 StETH);
 }
 
-contract LybraStETHDepositVault is LybraEUSDVaultBase {
+contract LybraStETHVault is LybraEUSDVaultBase {
     // Currently, the official rebase time for Lido is between 12PM to 13PM UTC.
     uint256 public lidoRebaseTime = 12 hours;
 
