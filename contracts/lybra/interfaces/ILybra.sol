@@ -12,4 +12,5 @@ interface ILybra {
     function getAssetPrice() external view returns (uint256);
     function getAsset() external view returns (address);
     function getAsset2EtherExchangeRate() external view returns (uint256);
+    function burn(address onBehalfOf, uint256 amount) external;
 }
