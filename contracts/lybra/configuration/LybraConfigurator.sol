@@ -18,6 +18,7 @@ import "../interfaces/IGovernanceTimelock.sol";
 import "../interfaces/IPeUSD.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 interface IProtocolRewardsPool {
@@ -36,7 +37,7 @@ interface ICurvePool{
     function exchange_underlying(int128 i, int128 j, uint256 dx, uint256 min_dy) external returns(uint256);
 }
 
-contract LybraConfigurator {
+contract LybraConfigurator is Initializable {
     using SafeERC20 for IERC20;
     mapping(address => bool) public mintVault;
     mapping(address => uint256) public mintVaultMaxSupply;
@@ -52,16 +53,16 @@ contract LybraConfigurator {
 
     AggregatorV3Interface public eUSDPriceFeed;
 
-    uint256 public redemptionFee = 50;
+    uint256 public redemptionFee;
     IGovernanceTimelock public GovernanceTimelock;
 
     IeUSDMiningIncentives public eUSDMiningIncentives;
     IProtocolRewardsPool public lybraProtocolRewardsPool;
     IPeUSD public EUSD;
     IPeUSD public peUSD;
-    uint256 public flashloanFee = 500;
+    uint256 public flashloanFee;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
-    uint256 maxStableRatio = 5_000;
+    uint256 maxStableRatio;
     address public stableToken;
     ICurvePool public curvePool;
     bool public premiumTradingEnabled;
@@ -84,8 +85,15 @@ contract LybraConfigurator {
     /// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
     event FlashloanFeeUpdated(uint256 fee);
 
+    constructor() {
+        _disableInitializers();
+    }
+
     //stableToken = USDC
-    constructor(address _dao, address _curvePool, address _eUSDPriceFeed, address _stableToken) {
+    function initialize(address _dao, address _curvePool, address _eUSDPriceFeed, address _stableToken) public initializer {
+        redemptionFee = 50;
+        flashloanFee = 500;
+        maxStableRatio = 5_000;
         GovernanceTimelock = IGovernanceTimelock(_dao);
         curvePool = ICurvePool(_curvePool);
         eUSDPriceFeed = AggregatorV3Interface(_eUSDPriceFeed);
@@ -305,10 +313,10 @@ contract LybraConfigurator {
      */
     function distributeRewards() external {
         uint256 balance = EUSD.balanceOf(address(this));
-        if (balance > 1e21) {
+        if (balance >= 1e21) {
             if(premiumTradingEnabled){
                 (, int price, , , ) = eUSDPriceFeed.latestRoundData();
-                if(price > 100_500_000){
+                if(price >= 100_500_000){
                     EUSD.approve(address(curvePool), balance);
                     uint256 amount = curvePool.exchange_underlying(0, 2, balance, balance * uint(price) * 998 / 1e23);
                     IERC20(stableToken).safeTransfer(address(lybraProtocolRewardsPool), amount);
