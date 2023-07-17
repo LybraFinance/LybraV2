@@ -156,7 +156,7 @@ abstract contract LybraPeUSDVaultBase {
         require(configurator.isRedemptionProvider(provider), "provider is not a RedemptionProvider");
         require(borrowed[provider] >= peusdAmount, "peusdAmount cannot surpass providers debt");
         uint256 assetPrice = getAssetPrice();
-        uint256 providerCollateralRatio = (depositedAsset[provider] * assetPrice * 100) / borrowed[provider];
+        uint256 providerCollateralRatio = (depositedAsset[provider] * assetPrice * 100) / getBorrowedOf(provider);
         require(providerCollateralRatio >= 100 * 1e18, "The provider's collateral ratio should be not less than 100%.");
         _repay(msg.sender, provider, peusdAmount);
         uint256 collateralAmount = (((peusdAmount * 1e18) / assetPrice) * (10_000 - configurator.redemptionFee())) / 10_000;
