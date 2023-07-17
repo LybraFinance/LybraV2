@@ -56,7 +56,7 @@ contract EUSDMiningIncentives is Ownable {
     AggregatorV3Interface internal lbrPriceFeed;
     bool public isEUSDBuyoutAllowed = true;
     bool public v1Supported;
-    address immutable oldLybra = 0x97de57eC338AB5d51557DA3434828C5DbFaDA371;
+    address immutable oldLybra;
 
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
     event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, bool useEUSD, uint256 time);
@@ -64,12 +64,13 @@ contract EUSDMiningIncentives is Ownable {
 
     //etherOracle = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
     //wETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
-    constructor(address _config, address _etherOracle, address _lbrOracle, address _weth) {
+    constructor(address _config, address _etherOracle, address _lbrOracle, address _weth, address _oldEUSD) {
         configurator = Iconfigurator(_config);
         EUSD = IEUSD(configurator.getEUSDAddress());
         etherPriceFeed = AggregatorV3Interface(_etherOracle);
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
         wETH = _weth;
+        oldLybra = _oldEUSD;
     }
 
     modifier updateReward(address _account) {
