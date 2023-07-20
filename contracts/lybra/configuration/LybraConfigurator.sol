@@ -143,7 +143,7 @@ contract LybraConfigurator is Initializable {
      * @notice  badCollateralRatio can be decided by DAO,starts at 130%
      */
     function setBadCollateralRatio(address pool, uint256 newRatio) external onlyRole(DAO) {
-        require(newRatio >= 130 * 1e18 && newRatio <= 150 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] + 1e19, "LNA");
+        require(newRatio >= 130 * 1e18 && newRatio <= 150 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] - 1e19, "LNA");
         vaultBadCollateralRatio[pool] = newRatio;
         emit SafeCollateralRatioChanged(pool, newRatio);
     }

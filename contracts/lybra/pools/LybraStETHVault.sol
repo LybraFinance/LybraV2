@@ -63,7 +63,7 @@ contract LybraStETHVault is LybraEUSDVaultBase {
         uint256 excessAmount = collateralAsset.balanceOf(address(this)) - totalDepositedAsset;
         require(excessAmount != 0 && stETHAmount != 0, "Only LSD excess income can be exchanged");
         uint256 realAmount = stETHAmount > excessAmount ? excessAmount : stETHAmount;
-        uint256 payAmount = (((realAmount * getAssetPrice()) / 1e18) * getDutchAuctionDiscountPrice()) / 10_000;
+        uint256 payAmount = realAmount * getAssetPrice() * getDutchAuctionDiscountPrice() / 10_000 / 1e18;
 
         uint256 income = feeStored + _newFee();
         if (payAmount > income) {

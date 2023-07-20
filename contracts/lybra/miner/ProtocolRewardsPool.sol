@@ -215,7 +215,7 @@ contract ProtocolRewardsPool is Ownable {
             peUSD.transfer(msg.sender, peUSDAmount);
             if(reward > peUSDAmount) {
                 ERC20 token = ERC20(configurator.stableToken());
-                uint256 tokenAmount = (reward - peUSDAmount) * token.decimals() / 1e18;
+                uint256 tokenAmount = (reward - peUSDAmount) * (10 ** token.decimals()) / 1e18;
                 token.safeTransfer(msg.sender, tokenAmount);
                 emit ClaimReward(msg.sender, peUSDAmount, address(token), reward - peUSDAmount, block.timestamp);
             } else {
