@@ -57,6 +57,7 @@ contract esLBRBoost is Ownable {
             IesLBR(miningIncentives.esLBR()).mint(msg.sender, lbrAmount);
         }
         require(IesLBR(miningIncentives.esLBR()).balanceOf(msg.sender) >= userStatus.lockAmount + lbrAmount, "IB");
+        miningIncentives.refreshReward(msg.sender);
         userLockStatus[msg.sender] = LockStatus(userStatus.lockAmount + lbrAmount, block.timestamp + _setting.duration, _setting.duration, _setting.miningBoost);
         
     }

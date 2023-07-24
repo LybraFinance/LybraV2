@@ -8,4 +8,5 @@ interface IMiningIncentives {
     function isOtherEarningsClaimable(address user) external view returns (bool);
     function esLBR() external view returns (address);
     function LBR() external view returns (address);
+    function refreshReward(address _account) external;
 }
