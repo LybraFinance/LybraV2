@@ -5,6 +5,7 @@ pragma solidity ^0.8.17;
 import "../interfaces/IEUSD.sol";
 import "./base/LybraPeUSDVaultBase.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IWBETH {
     function exchangeRate() external view returns (uint256);
@@ -12,12 +13,12 @@ interface IWBETH {
     function deposit(address referral) external payable;
 }
 
-contract LybraWBETHVault is LybraPeUSDVaultBase {
+contract LybraWBETHVault is LybraPeUSDVaultBase, ReentrancyGuard {
     //WBETH = 0xa2e3356610840701bdf5611a53974510ae27e2e1
     constructor(address _asset, address _oracle, address _config)
         LybraPeUSDVaultBase(_asset, _oracle, _config) {}
 
-    function depositEtherToMint(uint256 mintAmount) external payable override {
+    function depositEtherToMint(uint256 mintAmount) nonReentrant external payable override {
         require(msg.value >= 1 ether, "DNL");
         uint256 preBalance = collateralAsset.balanceOf(address(this));
         IWBETH(address(collateralAsset)).deposit{value: msg.value}(address(configurator));
