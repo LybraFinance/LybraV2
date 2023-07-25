@@ -5,6 +5,7 @@ pragma solidity ^0.8.17;
 import "../interfaces/IEUSD.sol";
 import "./base/LybraPeUSDVaultBase.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IRETH {
     function getExchangeRate() external view returns (uint256);
@@ -17,7 +18,7 @@ interface IRocketStorageInterface {
     function getAddress(bytes32 _key) external view returns (address);
 }
 
-contract LybraRETHVault is LybraPeUSDVaultBase {
+contract LybraRETHVault is LybraPeUSDVaultBase, ReentrancyGuard {
     IRocketStorageInterface immutable rocketStorage;
 
     // _rocketStorageAddress = 0x1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46
@@ -27,7 +28,7 @@ contract LybraRETHVault is LybraPeUSDVaultBase {
         rocketStorage = IRocketStorageInterface(_rocketStorageAddress);
     }
 
-    function depositEtherToMint(uint256 mintAmount) external payable override {
+    function depositEtherToMint(uint256 mintAmount) nonReentrant external payable override {
         require(msg.value >= 1 ether, "DNL");
         uint256 preBalance = collateralAsset.balanceOf(address(this));
         IRocketDepositPool(rocketStorage.getAddress(keccak256(abi.encodePacked("contract.address", "rocketDepositPool")))).deposit{value: msg.value}();
