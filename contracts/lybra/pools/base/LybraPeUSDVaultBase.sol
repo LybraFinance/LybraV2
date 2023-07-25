@@ -27,10 +27,10 @@ abstract contract LybraPeUSDVaultBase {
     event DepositEther(address indexed onBehalfOf, address asset, uint256 etherAmount, uint256 assetAmount, uint256 timestamp);
 
     event DepositAsset(address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
-    event WithdrawAsset(address sponsor, address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
-    event Mint(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
-    event Burn(address sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
-    event LiquidationRecord(address provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 LiquidateAssetAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
+    event WithdrawAsset(address indexed sponsor, address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
+    event Mint(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
+    event Burn(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
+    event LiquidationRecord(address indexed provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 LiquidateAssetAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
 
     event RigidRedemption(address indexed caller, address indexed provider, uint256 peusdAmount, uint256 assetAmount, uint256 timestamp);
     event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
