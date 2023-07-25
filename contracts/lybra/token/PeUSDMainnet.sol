@@ -35,7 +35,9 @@ contract PeUSDMainnet is OFTV2 {
         uint256 mintedPeUSD;
     }
 
-    event Flashloaned(address indexed receiver, uint256 borrowShares, uint256 burnAmount);
+    event Flashloaned(address indexed receiver, uint256 borrowShares, uint256 burnAmount, uint256 time);
+    event ConvertToEUSD(address indexed receiver, uint256 peUSDAmount, uint256 eUSDAmount, uint256 time);
+    event ConvertToPeUSD(address indexed receiver, uint256 eUSDAmount, uint256 peUSDAmount, uint256 time);
 
     modifier onlyMintVault() {
         require(configurator.mintVault(msg.sender), "RCP");
@@ -50,7 +52,7 @@ contract PeUSDMainnet is OFTV2 {
         _;
     }
 
-    constructor(address _eusd, address _config, uint8 _sharedDecimals, address _lzEndpoint) OFTV2("peg-eUSD", "PeUSD", _sharedDecimals, _lzEndpoint) {
+    constructor(address _eusd, address _config, uint8 _sharedDecimals, address _lzEndpoint) OFTV2("peg-eUSD", "peUSD", _sharedDecimals, _lzEndpoint) {
         configurator = Iconfigurator(_config);
         EUSD = IEUSD(_eusd);
     }
@@ -81,6 +83,7 @@ contract PeUSDMainnet is OFTV2 {
         userConvertInfo[user].depositedEUSDShares += share;
         userConvertInfo[user].mintedPeUSD += eusdAmount;
         _mint(user, eusdAmount);
+        emit ConvertToPeUSD(msg.sender, eusdAmount, eusdAmount, block.timestamp);
     }
 
     /**
@@ -114,6 +117,7 @@ contract PeUSDMainnet is OFTV2 {
         userConvertInfo[msg.sender].mintedPeUSD -= peusdAmount;
         userConvertInfo[msg.sender].depositedEUSDShares -= share;
         EUSD.transferShares(msg.sender, share);
+        emit ConvertToEUSD(msg.sender, peusdAmount, EUSD.getMintedEUSDByShares(share), block.timestamp);
     }
 
     /**
@@ -132,7 +136,7 @@ contract PeUSDMainnet is OFTV2 {
 
         uint256 burnShare = getFee(shareAmount);
         EUSD.burnShares(msg.sender, burnShare);
-        emit Flashloaned(address(receiver), eusdAmount, burnShare);
+        emit Flashloaned(address(receiver), eusdAmount, burnShare, block.timestamp);
     }
 
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
