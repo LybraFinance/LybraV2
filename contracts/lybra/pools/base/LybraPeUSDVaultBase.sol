@@ -152,7 +152,7 @@ abstract contract LybraPeUSDVaultBase {
      * - `provider`debt must equal to or above`peusdAmount`
      * @dev Service Fee for rigidRedemption `redemptionFee` is set to 0.5% by default, can be revised by DAO.
      */
-    function rigidRedemption(address provider, uint256 peusdAmount) external virtual {
+    function rigidRedemption(address provider, uint256 peusdAmount, uint256 minReceiveAmount) external virtual {
         require(configurator.isRedemptionProvider(provider), "provider is not a RedemptionProvider");
         require(borrowed[provider] >= peusdAmount, "peusdAmount cannot surpass providers debt");
         uint256 assetPrice = getAssetPrice();
@@ -160,6 +160,7 @@ abstract contract LybraPeUSDVaultBase {
         require(providerCollateralRatio >= 100 * 1e18, "The provider's collateral ratio should be not less than 100%.");
         _repay(msg.sender, provider, peusdAmount);
         uint256 collateralAmount = (((peusdAmount * 1e18) / assetPrice) * (10_000 - configurator.redemptionFee())) / 10_000;
+        require(collateralAmount >= minReceiveAmount, "EL");
         depositedAsset[provider] -= collateralAmount;
         collateralAsset.safeTransfer(msg.sender, collateralAmount);
         emit RigidRedemption(msg.sender, provider, peusdAmount, collateralAmount, block.timestamp);
