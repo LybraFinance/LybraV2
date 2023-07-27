@@ -11,7 +11,7 @@ import "@layerzerolabs/solidity-examples/contracts/token/oft/v2/OFTV2.sol";
 
 contract LBR is OFTV2 {
     Iconfigurator public immutable configurator;
-    uint256 maxSupply = 100_000_000 * 1e18;
+    uint256 constant maxSupply = 100_000_000 * 1e18;
 
     constructor(address _config, uint8 _sharedDecimals, address _lzEndpoint) OFTV2("Lybra", "LBR", _sharedDecimals, _lzEndpoint) {
         configurator = Iconfigurator(_config);

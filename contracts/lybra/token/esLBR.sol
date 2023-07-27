@@ -16,7 +16,7 @@ interface IProtocolRewardsPool {
 contract esLBR is ERC20Votes {
     Iconfigurator public immutable configurator;
 
-    uint256 maxSupply = 100_000_000 * 1e18;
+    uint256 constant maxSupply = 100_000_000 * 1e18;
 
     constructor(address _config) ERC20Permit("esLBR") ERC20("esLBR", "esLBR") {
         configurator = Iconfigurator(_config);
