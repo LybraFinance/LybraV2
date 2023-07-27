@@ -215,7 +215,7 @@ abstract contract LybraEUSDVaultBase {
     function excessIncomeDistribution(uint256 payAmount) external virtual;
 
     /**
-     * @notice Choose a Redemption Provider, Rigid Redeem `eusdAmount` of EUSD and get 1:1 value of stETH
+     * @notice Choose a Redemption Provider, Rigid Redeem `eusdAmount` of EUSD and get 1:1 value of collateral
      * Emits a `RigidRedemption` event.
      *
      * *Requirements:
@@ -223,7 +223,7 @@ abstract contract LybraEUSDVaultBase {
      * - `provider`debt must equal to or above`eusdAmount`
      * @dev Service Fee for rigidRedemption `redemptionFee` is set to 0.5% by default, can be revised by DAO.
      */
-    function rigidRedemption(address provider, uint256 eusdAmount) external virtual {
+    function rigidRedemption(address provider, uint256 eusdAmount, uint256 minReceiveAmount) external virtual {
         require(configurator.isRedemptionProvider(provider), "provider is not a RedemptionProvider");
         require(borrowed[provider] >= eusdAmount, "eusdAmount cannot surpass providers debt");
         uint256 assetPrice = getAssetPrice();
@@ -231,6 +231,7 @@ abstract contract LybraEUSDVaultBase {
         require(providerCollateralRatio >= 100 * 1e18, "The provider's collateral ratio should be not less than 100%.");
         _repay(msg.sender, provider, eusdAmount);
         uint256 collateralAmount = (((eusdAmount * 1e18) / assetPrice) * (10_000 - configurator.redemptionFee())) / 10_000;
+        require(collateralAmount >= minReceiveAmount, "EL");
         depositedAsset[provider] -= collateralAmount;
         totalDepositedAsset -= collateralAmount;
         collateralAsset.safeTransfer(msg.sender, collateralAmount);
