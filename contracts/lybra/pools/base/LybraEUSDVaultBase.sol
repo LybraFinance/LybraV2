@@ -235,7 +235,7 @@ abstract contract LybraEUSDVaultBase {
         require(collateralAmount >= minReceiveAmount, "EL");
         depositedAsset[provider] -= collateralAmount;
         totalDepositedAsset -= collateralAmount;
-        collateralAsset.safeTransfer(msg.sender, collateralAmount);
+        collateralAsset.safeTransfer(msg.sender, checkWithdrawal(msg.sender, collateralAmount));
         emit RigidRedemption(msg.sender, provider, eusdAmount, collateralAmount, block.timestamp);
     }
 
