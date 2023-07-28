@@ -97,12 +97,12 @@ contract StakingRewardsOnArbi is NonblockingLzApp {
     }
 
     // Allows users to claim their earned rewards
-    function getReward() external updateReward(msg.sender) payable {
+    function getReward(address zroPaymentAddress, bytes calldata adapterParams) external updateReward(msg.sender) payable {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
             bytes memory payload = abi.encode(msg.sender, reward);
-            _lzSend(dstChainId, payload, payable(msg.sender), address(0x0), bytes(""), msg.value);
+            _lzSend(dstChainId, payload, payable(msg.sender), zroPaymentAddress, adapterParams, msg.value);
             emit ClaimReward(msg.sender, reward, block.timestamp);
         }
     }
