@@ -224,6 +224,7 @@ abstract contract LybraEUSDVaultBase {
      * @dev Service Fee for rigidRedemption `redemptionFee` is set to 0.5% by default, can be revised by DAO.
      */
     function rigidRedemption(address provider, uint256 eusdAmount, uint256 minReceiveAmount) external virtual {
+        require(provider != msg.sender, "CBS");
         require(configurator.isRedemptionProvider(provider), "provider is not a RedemptionProvider");
         require(borrowed[provider] >= eusdAmount, "eusdAmount cannot surpass providers debt");
         uint256 assetPrice = getAssetPrice();
