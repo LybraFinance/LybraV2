@@ -47,6 +47,7 @@ contract esLBRBoost is Ownable {
      * @param useLBR A flag indicating whether to use LBR or not.
      */
     function setLockStatus(uint256 id, uint256 lbrAmount, bool useLBR) external {
+        require(id < esLBRLockSettings.length, "Invalid lock setting ID");
         esLBRLockSetting memory _setting = esLBRLockSettings[id];
         LockStatus memory userStatus = userLockStatus[msg.sender];
         if (userStatus.unlockTime > block.timestamp) {

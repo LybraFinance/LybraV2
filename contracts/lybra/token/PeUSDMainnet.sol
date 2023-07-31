@@ -19,7 +19,7 @@ import "@layerzerolabs/solidity-examples/contracts/token/oft/v2/OFTV2.sol";
 
 interface IFlashBorrower {
     /// @notice Flash loan callback
-    /// @param amount The amount of tokens received
+    /// @param amount The share amount of tokens received
     /// @param data Forwarded data from the flash loan request
     /// @dev Called after receiving the requested flash loan, should return tokens + any fees before the end of the transaction
     function onFlashLoan(uint256 amount, bytes calldata data) external;
@@ -43,11 +43,11 @@ contract PeUSDMainnet is OFTV2 {
         require(configurator.mintVault(msg.sender), "RCP");
         _;
     }
-    modifier MintPaused() {
+    modifier mintEnabled() {
         require(!configurator.vaultMintPaused(msg.sender), "MPP");
         _;
     }
-    modifier BurnPaused() {
+    modifier burnEnabled() {
         require(!configurator.vaultBurnPaused(msg.sender), "BPP");
         _;
     }
@@ -57,13 +57,12 @@ contract PeUSDMainnet is OFTV2 {
         EUSD = IEUSD(_eusd);
     }
 
-    function mint(address to, uint256 amount) external onlyMintVault MintPaused returns (bool) {
-        require(to != address(0), "TZA");
+    function mint(address to, uint256 amount) external onlyMintVault mintEnabled returns (bool) {
         _mint(to, amount);
         return true;
     }
 
-    function burn(address account, uint256 amount) external onlyMintVault BurnPaused returns (bool) {
+    function burn(address account, uint256 amount) external onlyMintVault burnEnabled returns (bool) {
         _burn(account, amount);
         return true;
     }

@@ -24,8 +24,8 @@ import "../interfaces/Iconfigurator.sol";
  *
  * Therefore:
  *
- *   balanceOf(user1) -> 2 tokens which corresponds 200 EUSD
- *   balanceOf(user2) -> 8 tokens which corresponds 800 EUSD
+ *   balanceOf(user1) -> 200 tokens which corresponds 200 EUSD
+ *   balanceOf(user2) -> 800 tokens which corresponds 800 EUSD
  *
  * Since balances of all token holders change when the amount of total shares
  * changes, this token cannot fully implement ERC20 standard: it only emits `Transfer`
@@ -78,11 +78,11 @@ contract EUSD is IERC20, Context {
         require(configurator.mintVault(msg.sender), "RCP");
         _;
     }
-    modifier MintPaused() {
+    modifier mintEnabled() {
         require(!configurator.vaultMintPaused(msg.sender), "MPP");
         _;
     }
-    modifier BurnPaused() {
+    modifier burnEnabled() {
         require(!configurator.vaultBurnPaused(msg.sender), "BPP");
         _;
     }
@@ -231,8 +231,6 @@ contract EUSD is IERC20, Context {
      * @notice Atomically increases the allowance granted to `_spender` by the caller by `_addedValue`.
      *
      * This is an alternative to `approve` that can be used as a mitigation for
-     * problems described in:
-     * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/IERC20.sol#L42
      * Emits an `Approval` event indicating the updated allowance.
      *
      * Requirements:
@@ -249,8 +247,6 @@ contract EUSD is IERC20, Context {
      * @notice Atomically decreases the allowance granted to `_spender` by the caller by `_subtractedValue`.
      *
      * This is an alternative to `approve` that can be used as a mitigation for
-     * problems described in:
-     * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/IERC20.sol#L42
      * Emits an `Approval` event indicating the updated allowance.
      *
      * Requirements:
@@ -388,7 +384,7 @@ contract EUSD is IERC20, Context {
     }
 
     /**
-     * @notice Creates `_sharesAmount` shares and assigns them to `_recipient`, increasing the total amount of shares.
+     * @notice Creates `sharesAmount` shares and assigns them to `_recipient`, increasing the total amount of shares.
      * @dev This operation also increases the total supply of tokens.
      *
      * Requirements:
@@ -396,7 +392,7 @@ contract EUSD is IERC20, Context {
      * - `_recipient` cannot be the zero address.
      * - the contract must not be paused.
      */
-    function mint(address _recipient, uint256 _mintAmount) external onlyMintVault MintPaused returns (uint256 newTotalShares) {
+    function mint(address _recipient, uint256 _mintAmount) external onlyMintVault mintEnabled returns (uint256 newTotalShares) {
         require(_recipient != address(0), "MINT_TO_THE_ZERO_ADDRESS");
         require(_mintAmount != 0, "ZA");
         uint256 sharesAmount = getSharesByMintedEUSD(_mintAmount);
@@ -426,7 +422,7 @@ contract EUSD is IERC20, Context {
      * - `_account` must hold at least `sharesAmount` shares.
      * - the contract must not be paused.
      */
-    function burn(address _account, uint256 _burnAmount) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
+    function burn(address _account, uint256 _burnAmount) external onlyMintVault burnEnabled returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
         uint256 sharesAmount = getSharesByMintedEUSD(_burnAmount);
         require(sharesAmount != 0, "ZA");
@@ -446,7 +442,7 @@ contract EUSD is IERC20, Context {
      * - `_account` must hold at least `sharesAmount` shares.
      * - the contract must not be paused.
      */
-    function burnShares(address _account, uint256 _sharesAmount) external onlyMintVault BurnPaused returns (uint256 newTotalShares) {
+    function burnShares(address _account, uint256 _sharesAmount) external onlyMintVault burnEnabled returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
         require(_sharesAmount != 0, "ZA");
         newTotalShares = _onlyBurnShares(_account, _sharesAmount);

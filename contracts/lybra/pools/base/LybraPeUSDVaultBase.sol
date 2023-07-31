@@ -27,7 +27,7 @@ abstract contract LybraPeUSDVaultBase {
     event DepositEther(address indexed onBehalfOf, address asset, uint256 etherAmount, uint256 assetAmount, uint256 timestamp);
 
     event DepositAsset(address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
-    event WithdrawAsset(address indexed sponsor, address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
+    event WithdrawAsset(address indexed sponsor, address asset, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Mint(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Burn(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event LiquidationRecord(address indexed provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 LiquidateAssetAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
@@ -76,7 +76,7 @@ abstract contract LybraPeUSDVaultBase {
      * - `onBehalfOf` cannot be the zero address.
      * - `amount` Must be higher than 0.
      *
-     * @dev Withdraw stETH. Check user’s collateral ratio after withdrawal, should be higher than `safeCollateralRatio`
+     * @dev Withdraw collateral. Check user’s collateral ratio after withdrawal, should be higher than `safeCollateralRatio`
      */
     function withdraw(address onBehalfOf, uint256 amount) external virtual {
         require(onBehalfOf != address(0), "TZA");
@@ -118,7 +118,7 @@ abstract contract LybraPeUSDVaultBase {
      * - onBehalfOf Collateral Ratio should be below badCollateralRatio
      * - assetAmount should be less than 50% of collateral
      * - provider should authorize Lybra to utilize PeUSD
-     * @dev After liquidation, borrower's debt is reduced by assetAmount * assetPrice, collateral is reduced by the assetAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
+     * @dev After liquidation, borrower's debt is reduced by assetAmount * assetPrice, collateral is reduced by the assetAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining collateral.
      */
     function liquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
         uint256 assetPrice = getAssetPrice();
@@ -126,7 +126,7 @@ abstract contract LybraPeUSDVaultBase {
         require(onBehalfOfCollateralRatio < configurator.getBadCollateralRatio(address(this)), "Borrowers collateral ratio should below badCollateralRatio");
 
         require(assetAmount * 2 <= depositedAsset[onBehalfOf], "a max of 50% collateral can be liquidated");
-        require(PeUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation EUSD");
+        require(PeUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation peUSD");
         uint256 peusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, peusdAmount);
@@ -160,7 +160,7 @@ abstract contract LybraPeUSDVaultBase {
         uint256 providerCollateralRatio = (depositedAsset[provider] * assetPrice * 100) / getBorrowedOf(provider);
         require(providerCollateralRatio >= 100 * 1e18, "The provider's collateral ratio should be not less than 100%.");
         _repay(msg.sender, provider, peusdAmount);
-        uint256 collateralAmount = (((peusdAmount * 1e18) / assetPrice) * (10_000 - configurator.redemptionFee())) / 10_000;
+        uint256 collateralAmount = peusdAmount * 1e18 * (10_000 - configurator.redemptionFee()) / assetPrice / 10_000;
         require(collateralAmount >= minReceiveAmount, "EL");
         depositedAsset[provider] -= collateralAmount;
         collateralAsset.safeTransfer(msg.sender, collateralAmount);
@@ -219,7 +219,7 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @dev Get USD value of current collateral asset and minted EUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
+     * @dev Get USD value of current collateral asset and minted peUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
      */
     function _checkHealth(address user, uint256 price) internal view {
         if (((depositedAsset[user] * price * 100) / getBorrowedOf(user)) < configurator.getSafeCollateralRatio(address(this))) 

@@ -72,12 +72,13 @@ contract LybraConfigurator is Initializable {
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRatioChanged(address indexed pool, uint256 newRatio);
+    event BadCollateralRatioChanged(address indexed pool, uint256 newRatio);
     event RedemptionProvider(address indexed user, bool status);
     event ProtocolRewardsPoolChanged(address indexed pool, uint256 timestamp);
     event EUSDMiningIncentivesChanged(address indexed pool, uint256 timestamp);
     event BorrowApyChanged(address indexed pool, uint256 newApy);
     event KeeperRatioChanged(address indexed pool, uint256 newSlippage);
-    event tokenMinerChanges(address indexed pool, bool status);
+    event TokenMinerChanges(address indexed pool, bool status);
     event VaultWeightChanged(address indexed pool, uint256 weight, uint256 timestamp);
     event SendProtocolRewards(address indexed token, uint256 amount, uint256 timestamp);
 
@@ -145,7 +146,7 @@ contract LybraConfigurator is Initializable {
     function setBadCollateralRatio(address pool, uint256 newRatio) external onlyRole(DAO) {
         require(newRatio >= 130 * 1e18 && newRatio <= 150 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] - 1e19, "LNA");
         vaultBadCollateralRatio[pool] = newRatio;
-        emit SafeCollateralRatioChanged(pool, newRatio);
+        emit BadCollateralRatioChanged(pool, newRatio);
     }
 
     /**
@@ -194,7 +195,7 @@ contract LybraConfigurator is Initializable {
      * @param isActive Boolean value indicating whether repayment is active or paused.
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
      */
-    function setvaultBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK) {
+    function setVaultBurnPaused(address pool, bool isActive) external checkRole(TIMELOCK) {
         vaultBurnPaused[pool] = isActive;
     }
 
@@ -202,7 +203,7 @@ contract LybraConfigurator is Initializable {
      * @notice Enables or disables the mint functionality for a asset pool.
      * @param pool The address of the pool.
      * @param isActive Boolean value indicating whether minting is active or paused.
-     * @dev This function can only be called by accounts with ADMIN or higher privilege.
+     * @dev This function can only be called by accounts with ADMIN or DAO.
      */
     function setvaultMintPaused(address pool, bool isActive) external checkRole(ADMIN) {
         vaultMintPaused[pool] = isActive;
@@ -265,7 +266,7 @@ contract LybraConfigurator is Initializable {
     function setTokenMiner(address[] calldata _contracts, bool[] calldata _bools) external checkRole(TIMELOCK) {
         for (uint256 i = 0; i < _contracts.length; i++) {
             tokenMiner[_contracts[i]] = _bools[i];
-            emit tokenMinerChanges(_contracts[i], _bools[i]);
+            emit TokenMinerChanges(_contracts[i], _bools[i]);
         }
     }
 

@@ -157,7 +157,7 @@ contract ProtocolRewardsPool is Ownable {
     }
 
     /**
-     * @dev Convert unredeemed and converting ESLBR tokens back to LBR.
+     * @dev Convert unredeemed and converting LBR tokens back to esLBR.
      */
     function reStake() external {
         uint256 amount = getReservedLBRForVesting(msg.sender) + getClaimAbleLBR(msg.sender);

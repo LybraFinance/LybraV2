@@ -16,7 +16,7 @@ abstract contract LybraEUSDVaultBase {
     IEUSD public immutable EUSD;
     IERC20 public immutable collateralAsset;
     Iconfigurator public immutable configurator;
-    uint256 public immutable badCollateralRatio = 150 * 1e18;
+    uint256 public constant badCollateralRatio = 150 * 1e18;
     IPriceFeed immutable etherOracle;
 
     uint256 public totalDepositedAsset;
@@ -54,7 +54,7 @@ abstract contract LybraEUSDVaultBase {
      * Emits a `DepositEther` event.
      *
      * Requirements:
-     * - `mintAmount` Send 0 if doesn't mint EUSD
+     * - `mintAmount` Send 0 if doesn't mint eUSD
      * - msg.value Must be higher than 0.
      */
     function depositEtherToMint(uint256 mintAmount) external payable virtual;
@@ -64,8 +64,8 @@ abstract contract LybraEUSDVaultBase {
      * Emits a `DepositAsset` event.
      *
      * Requirements:
-     * - `assetAmount` Must be higher than 0.
-     * - `mintAmount` Send 0 if doesn't mint EUSD
+     * - `assetAmount` Must be higher than 1e18.
+     * - `mintAmount` Send 0 if doesn't mint eUSD
      */
     function depositAssetToMint(uint256 assetAmount, uint256 mintAmount) external virtual {
         require(assetAmount >= 1 ether, "Deposit should not be less than 1 stETH.");
@@ -111,7 +111,7 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @notice The mint amount number of EUSD is minted to the address
+     * @notice The mint amount number of eUSD is minted to the address
      * Emits a `Mint` event.
      *
      * Requirements:
@@ -124,7 +124,7 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @notice Burn the amount of EUSD and payback the amount of minted EUSD
+     * @notice Burn the amount of eUSD and payback the amount of minted eUSD
      * Emits a `Burn` event.
      * Requirements:
      * - `onBehalfOf` cannot be the zero address.
@@ -142,7 +142,7 @@ abstract contract LybraEUSDVaultBase {
      * Requirements:
      * - onBehalfOf Collateral Ratio should be below badCollateralRatio
      * - collateralAmount should be less than 50% of collateral
-     * - provider should authorize Lybra to utilize EUSD
+     * - provider should authorize Lybra to utilize eUSD
      * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, collateral is reduced by the collateralAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
      */
     function liquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
@@ -151,7 +151,7 @@ abstract contract LybraEUSDVaultBase {
         require(onBehalfOfCollateralRatio < badCollateralRatio, "Borrowers collateral ratio should below badCollateralRatio");
 
         require(assetAmount * 2 <= depositedAsset[onBehalfOf], "a max of 50% collateral can be liquidated");
-        require(EUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation EUSD");
+        require(EUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation eUSD");
         uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, eusdAmount);
@@ -188,7 +188,7 @@ abstract contract LybraEUSDVaultBase {
         if (onBehalfOfCollateralRatio >= 1e20) {
             eusdAmount = (eusdAmount * 1e20) / onBehalfOfCollateralRatio;
         }
-        require(EUSD.allowance(provider, address(this)) >= eusdAmount, "provider should authorize to provide liquidation EUSD");
+        require(EUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation eUSD");
 
         _repay(provider, onBehalfOf, eusdAmount);
 
@@ -205,7 +205,7 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @notice When stETH balance increases through LSD or other reasons, the excess income is sold for EUSD, allocated to EUSD holders through rebase mechanism.
+     * @notice When stETH balance increases through LSD or other reasons, the excess income is sold for eUSD, allocated to eUSD holders through rebase mechanism.
      * Emits a `LSDistribution` event.
      *
      * *Requirements:
@@ -215,7 +215,7 @@ abstract contract LybraEUSDVaultBase {
     function excessIncomeDistribution(uint256 payAmount) external virtual;
 
     /**
-     * @notice Choose a Redemption Provider, Rigid Redeem `eusdAmount` of EUSD and get 1:1 value of collateral
+     * @notice Choose a Redemption Provider, Rigid Redeem `eusdAmount` of eUSD and get 1:1 value of collateral
      * Emits a `RigidRedemption` event.
      *
      * *Requirements:
@@ -231,7 +231,7 @@ abstract contract LybraEUSDVaultBase {
         uint256 providerCollateralRatio = (depositedAsset[provider] * assetPrice * 100) / borrowed[provider];
         require(providerCollateralRatio >= 100 * 1e18, "The provider's collateral ratio should be not less than 100%.");
         _repay(msg.sender, provider, eusdAmount);
-        uint256 collateralAmount = (((eusdAmount * 1e18) / assetPrice) * (10_000 - configurator.redemptionFee())) / 10_000;
+        uint256 collateralAmount = eusdAmount * 1e18 * (10_000 - configurator.redemptionFee()) / assetPrice / 10_000;
         require(collateralAmount >= minReceiveAmount, "EL");
         depositedAsset[provider] -= collateralAmount;
         totalDepositedAsset -= collateralAmount;
@@ -265,7 +265,7 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @notice Burn _provideramount EUSD to payback minted EUSD for _onBehalfOf.
+     * @notice Burn _provideramount eUSD to payback minted eUSD for _onBehalfOf.
      *
      * @dev Refresh LBR reward before reducing providers debt. Refresh Lybra generated service fee before reducing totalEUSDCirculation.
      */
@@ -282,7 +282,7 @@ abstract contract LybraEUSDVaultBase {
     }
 
     /**
-     * @dev Get USD value of current collateral asset and minted EUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
+     * @dev Get USD value of current collateral asset and minted eUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
      */
     function _checkHealth(address _user, uint256 _assetPrice) internal view {
         if (((depositedAsset[_user] * _assetPrice * 100) / borrowed[_user]) < configurator.getSafeCollateralRatio(address(this))) revert("collateralRatio is Below safeCollateralRatio");
