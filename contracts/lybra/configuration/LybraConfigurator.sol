@@ -205,7 +205,7 @@ contract LybraConfigurator is Initializable {
      * @param isActive Boolean value indicating whether minting is active or paused.
      * @dev This function can only be called by accounts with ADMIN or DAO.
      */
-    function setvaultMintPaused(address pool, bool isActive) external checkRole(ADMIN) {
+    function setVaultMintPaused(address pool, bool isActive) external checkRole(ADMIN) {
         vaultMintPaused[pool] = isActive;
     }
 
