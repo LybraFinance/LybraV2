@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0
 
 /**
- * @title PeUSD Token
- * @dev PeUSD is a stable, interest-free ERC20-like token minted through eUSD in the Lybra protocol.
+ * @title peUSD Token
+ * @dev peUSD is a stable, interest-free ERC20-like token minted through eUSD in the Lybra protocol.
  * It is pegged to 1 USD and does not undergo rebasing.
- * PeUSD can be minted and burned through non-rebasing asset pools.
- * Additionally, PeUSD can be minted in equivalent amounts by depositing eUSD.
- * The contract keeps track of the totalShares of eUSD deposited by users and the totalMinted PeUSD.
- * When users redeem PeUSD, they can retrieve the corresponding proportion of eUSD.
- * As a result, users can utilize PeUSD without sacrificing the yield on their eUSD holdings.
+ * peUSD can be minted and burned through non-rebasing asset pools.
+ * Additionally, peUSD can be minted in equivalent amounts by depositing eUSD.
+ * The contract keeps track of the totalShares of eUSD deposited by users and the totalMinted peUSD.
+ * When users redeem peUSD, they can retrieve the corresponding proportion of eUSD.
+ * As a result, users can utilize peUSD without sacrificing the yield on their eUSD holdings.
  */
 
 pragma solidity ^0.8.17;
@@ -68,9 +68,9 @@ contract PeUSDMainnet is OFTV2 {
     }
 
     /**
-     * @notice Allows the user to deposit eUSD and mint PeUSD tokens.
-     * @param user The address of the user who wants to deposit eUSD and mint PeUSD. It can only be the contract itself or the msg.sender.
-     * @param eusdAmount The amount of eUSD to deposit and mint PeUSD tokens.
+     * @notice Allows the user to deposit eUSD and mint peUSD tokens.
+     * @param user The address of the user who wants to deposit eUSD and mint peUSD. It can only be the contract itself or the msg.sender.
+     * @param eusdAmount The amount of eUSD to deposit and mint peUSD tokens.
      */
     function convertToPeUSD(address user, uint256 eusdAmount) public {
         require(_msgSender() == user || _msgSender() == address(this), "MDM");
@@ -85,8 +85,8 @@ contract PeUSDMainnet is OFTV2 {
     }
 
     /**
-     * @dev Allows users to deposit eUSD and mint PeUSD tokens, which can be directly bridged to other networks.
-     * @param eusdAmount The amount of eUSD to deposit and mint PeUSD tokens.
+     * @dev Allows users to deposit eUSD and mint peUSD tokens, which can be directly bridged to other networks.
+     * @param eusdAmount The amount of eUSD to deposit and mint peUSD tokens.
      * @param dstChainId The chain ID of the target network.
      * @param toAddress The receiving address after cross-chain transfer.
      * @param callParams Additional parameters.
@@ -102,8 +102,8 @@ contract PeUSDMainnet is OFTV2 {
     }
 
     /**
-     * @dev Allows users to repay PeUSD tokens and retrieve eUSD.
-     * @param peusdAmount The amount of PeUSD tokens to burn and retrieve eUSD. The user's balance of PeUSD tokens must be greater than or equal to this amount.
+     * @dev Allows users to repay peUSD tokens and retrieve eUSD.
+     * @param peusdAmount The amount of peUSD tokens to burn and retrieve eUSD. The user's balance of peUSD tokens must be greater than or equal to this amount.
      * Requirements:
      * `peusdAmount` must be greater than 0.
      * The user's `mintedPeUSD` must be greater than or equal to `peusdAmount`.

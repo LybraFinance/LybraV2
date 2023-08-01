@@ -9,7 +9,7 @@ import "../interfaces/Iconfigurator.sol";
 /**
  * @title Interest-bearing ERC20-like token for Lybra protocol.
  *
- * EUSD balances are dynamic and represent the holder's share in the total amount
+ * eUSD balances are dynamic and represent the holder's share in the total amount
  * of Ether controlled by the protocol. Account shares aren't normalized, so the
  * contract also stores the sum of all shares to calculate each account's token balance
  * which equals to:
@@ -18,14 +18,14 @@ import "../interfaces/Iconfigurator.sol";
  *
  * For example, assume that we have:
  *
- *   _getTotalMintedEUSD() -> 1000 EUSD
+ *   _getTotalMintedEUSD() -> 1000 eUSD
  *   sharesOf(user1) -> 100
  *   sharesOf(user2) -> 400
  *
  * Therefore:
  *
- *   balanceOf(user1) -> 200 tokens which corresponds 200 EUSD
- *   balanceOf(user2) -> 800 tokens which corresponds 800 EUSD
+ *   balanceOf(user1) -> 200 tokens which corresponds 200 eUSD
+ *   balanceOf(user2) -> 800 tokens which corresponds 800 eUSD
  *
  * Since balances of all token holders change when the amount of total shares
  * changes, this token cannot fully implement ERC20 standard: it only emits `Transfer`
@@ -39,7 +39,7 @@ contract EUSD is IERC20, Context {
     uint256 private _totalSupply;
 
     /**
-     * @dev EUSD balances are dynamic and are calculated based on the accounts' shares
+     * @dev eUSD balances are dynamic and are calculated based on the accounts' shares
      * and the total supply by the protocol. Account shares aren't
      * normalized, so the contract also stores the sum of all shares to calculate
      * each account's token balance which equals to:
@@ -64,12 +64,12 @@ contract EUSD is IERC20, Context {
      * @notice An executed `burnShares` request
      *
      * @dev Reports simultaneously burnt shares amount
-     * and corresponding EUSD amount.
-     * The EUSD amount is calculated twice: before and after the burning incurred rebase.
+     * and corresponding eUSD amount.
+     * The eUSD amount is calculated twice: before and after the burning incurred rebase.
      *
      * @param account holder of the burnt shares
-     * @param preRebaseTokenAmount amount of EUSD the burnt shares corresponded to before the burn
-     * @param postRebaseTokenAmount amount of EUSD the burnt shares corresponded to after the burn
+     * @param preRebaseTokenAmount amount of eUSD the burnt shares corresponded to before the burn
+     * @param postRebaseTokenAmount amount of eUSD the burnt shares corresponded to after the burn
      * @param sharesAmount amount of burnt shares
      */
     event SharesBurnt(address indexed account, uint256 preRebaseTokenAmount, uint256 postRebaseTokenAmount, uint256 sharesAmount);
@@ -114,10 +114,10 @@ contract EUSD is IERC20, Context {
     }
 
     /**
-     * @return the amount of EUSD in existence.
+     * @return the amount of eUSD in existence.
      *
      * @dev Always equals to `_getTotalMintedEUSD()` since token amount
-     * is pegged to the total amount of EUSD controlled by the protocol.
+     * is pegged to the total amount of eUSD controlled by the protocol.
      */
     function totalSupply() public view returns (uint256) {
         return _totalSupply;
@@ -283,7 +283,7 @@ contract EUSD is IERC20, Context {
     }
 
     /**
-     * @return the amount of shares that corresponds to `_EUSDAmount` protocol-supplied EUSD.
+     * @return the amount of shares that corresponds to `_EUSDAmount` protocol-supplied eUSD.
      */
     function getSharesByMintedEUSD(uint256 _EUSDAmount) public view returns (uint256) {
         uint256 totalMintedEUSD = _totalSupply;
@@ -294,7 +294,7 @@ contract EUSD is IERC20, Context {
     }
 
     /**
-     * @return the amount of EUSD that corresponds to `_sharesAmount` token shares.
+     * @return the amount of eUSD that corresponds to `_sharesAmount` token shares.
      */
     function getMintedEUSDByShares(uint256 _sharesAmount) public view returns (uint256) {
         if (_totalShares == 0) {
@@ -398,7 +398,7 @@ contract EUSD is IERC20, Context {
         uint256 sharesAmount = getSharesByMintedEUSD(_mintAmount);
         if (sharesAmount == 0) {
             require(_totalSupply == 0, "ZA");
-            //eUSD totalSupply is 0: assume that shares correspond to EUSD 1-to-1
+            //eUSD totalSupply is 0: assume that shares correspond to eUSD 1-to-1
             sharesAmount = _mintAmount;
         }
 

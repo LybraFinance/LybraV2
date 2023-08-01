@@ -158,7 +158,7 @@ contract EUSDMiningIncentives is Ownable {
     }
 
     /**
-     * @notice Returns the total amount of borrowed eUSD and PeUSD by the user.
+     * @notice Returns the total amount of borrowed eUSD and peUSD by the user.
      */
     function stakedOf(address user) public view returns (uint256) {
         uint256 amount;
@@ -241,18 +241,18 @@ contract EUSDMiningIncentives is Ownable {
     /**
      * @notice Purchasing the esLBR earnings from users who have insufficient DLP.
      * @param user The address of the user whose earnings will be purchased.
-     * @param useEUSD Boolean indicating if the purchase will be made using EUSD.
+     * @param useEUSD Boolean indicating if the purchase will be made using eUSD.
      * Requirements:
      * The user's earnings must be claimable by others.
-     * If using EUSD, the purchase must be permitted.
+     * If using eUSD, the purchase must be permitted.
      * The user must have non-zero rewards.
-     * If using EUSD, the caller must have sufficient EUSD balance and allowance.
+     * If using eUSD, the caller must have sufficient eUSD balance and allowance.
      */
     function _buyOtherEarnings(address user, bool useEUSD) internal updateReward(user) {
         require(isOtherEarningsClaimable(user), "The rewards of the user cannot be bought out");
         require(rewards[user] != 0, "ZA");
         if(useEUSD) {
-            require(isEUSDBuyoutAllowed, "The purchase using EUSD is not permitted.");
+            require(isEUSDBuyoutAllowed, "The purchase using eUSD is not permitted.");
         }
         uint256 reward = rewards[user];
         rewards[user] = 0;

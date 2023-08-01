@@ -223,14 +223,14 @@ contract LybraConfigurator is Initializable {
     /**
      * @notice  safeCollateralRatio can be decided by TIMELOCK.
      * The eUSD vault requires a minimum safe collateral rate of 160%,
-     * On the other hand, the PeUSD vault requires a safe collateral rate at least 10% higher
+     * On the other hand, the peUSD vault requires a safe collateral rate at least 10% higher
      * than the liquidation collateral rate, providing an additional buffer to protect against liquidation risks.
      */
     function setSafeCollateralRatio(address pool, uint256 newRatio) external checkRole(TIMELOCK) {
         if(IVault(pool).getVaultType() == 0) {
             require(newRatio >= 160 * 1e18, "eUSD vault safe collateralRatio should more than 160%");
         } else {
-            require(newRatio >= vaultBadCollateralRatio[pool] + 1e19, "PeUSD vault safe collateralRatio should more than bad collateralRatio");
+            require(newRatio >= vaultBadCollateralRatio[pool] + 1e19, "peUSD vault safe collateralRatio should more than bad collateralRatio");
         }
         vaultSafeCollateralRatio[pool] = newRatio;
         emit SafeCollateralRatioChanged(pool, newRatio);
@@ -271,7 +271,7 @@ contract LybraConfigurator is Initializable {
     }
 
     /**
-     * dev Sets the maximum percentage share for PeUSD.
+     * dev Sets the maximum percentage share for peUSD.
      * @param _ratio The ratio in basis points (1/10_000). The maximum value is 10_000.
      */
     function setMaxStableRatio(uint256 _ratio) external checkRole(TIMELOCK) {
@@ -386,8 +386,8 @@ contract LybraConfigurator is Initializable {
     }
 
     /**
-     * @dev Return the maximum quantity of PeUSD that can be minted by using eUSD.
-     * @return The maximum quantity of PeUSD that can be minted through eUSD.
+     * @dev Return the maximum quantity of peUSD that can be minted by using eUSD.
+     * @return The maximum quantity of peUSD that can be minted through eUSD.
      */
     function getEUSDMaxLocked() external view returns (uint256) {
         return (EUSD.totalSupply() * maxStableRatio) / 10_000;
