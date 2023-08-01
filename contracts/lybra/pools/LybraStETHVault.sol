@@ -52,7 +52,7 @@ contract LybraStETHVault is LybraEUSDVaultBase {
     }
 
     /**
-     * @notice When stETH balance increases through LSD or other reasons, the excess income is sold for EUSD, allocated to EUSD holders through rebase mechanism.
+     * @notice When stETH balance increases through LSD or other reasons, the excess income is sold for eUSD, allocated to eUSD holders through rebase mechanism.
      * Emits a `LSDValueCaptured` event.
      *
      * *Requirements:
@@ -75,7 +75,7 @@ contract LybraStETHVault is LybraEUSDVaultBase {
 
             uint256 sharesAmount = EUSD.getSharesByMintedEUSD(payAmount - income);
             if (sharesAmount == 0) {
-                //EUSD totalSupply is 0: assume that shares correspond to EUSD 1-to-1
+                //eUSD totalSupply is 0: assume that shares correspond to eUSD 1-to-1
                 sharesAmount = (payAmount - income);
             }
             //Income is distributed to LBR staker.
