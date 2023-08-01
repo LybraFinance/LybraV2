@@ -35,7 +35,7 @@ abstract contract LybraEUSDVaultBase {
     event WithdrawAsset(address indexed sponsor, address asset, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Mint(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Burn(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
-    event LiquidationRecord(address indexed provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 liquidateEtherAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
+    event LiquidationRecord(address indexed provider, address indexed keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 liquidateEtherAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
     event LSDValueCaptured(uint256 stETHAdded, uint256 payoutEUSD, uint256 discountRate, uint256 timestamp);
     event RigidRedemption(address indexed caller, address indexed provider, uint256 eusdAmount, uint256 collateralAmount, uint256 timestamp);
     event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
@@ -143,7 +143,7 @@ abstract contract LybraEUSDVaultBase {
      * - onBehalfOf Collateral Ratio should be below badCollateralRatio
      * - collateralAmount should be less than 50% of collateral
      * - provider should authorize Lybra to utilize eUSD
-     * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, collateral is reduced by the collateralAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining stETH.
+     * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, providers and keepers can receive up to an additional 10% liquidation reward. 
      */
     function liquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
         uint256 assetPrice = getAssetPrice();
@@ -155,17 +155,25 @@ abstract contract LybraEUSDVaultBase {
         uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, eusdAmount);
-        uint256 reducedAsset = assetAmount * 11 / 10;
+        uint256 reducedAsset = assetAmount;
+
+        if(onBehalfOfCollateralRatio > 1e20 && onBehalfOfCollateralRatio < 11e19) {
+            reducedAsset = assetAmount * onBehalfOfCollateralRatio / 1e20;
+        }
+        if(onBehalfOfCollateralRatio >= 11e19) {
+            reducedAsset = assetAmount * 11 / 10;
+        }
         totalDepositedAsset -= reducedAsset;
         depositedAsset[onBehalfOf] -= reducedAsset;
+
         uint256 reward2keeper;
-        if (provider == msg.sender) {
-            collateralAsset.safeTransfer(msg.sender, reducedAsset);
-        } else {
-            reward2keeper = (reducedAsset * configurator.vaultKeeperRatio(address(this))) / 110;
-            collateralAsset.safeTransfer(provider, reducedAsset - reward2keeper);
+        uint256 keeperRatio = configurator.vaultKeeperRatio(address(this));
+        if (msg.sender != provider && onBehalfOfCollateralRatio >= 1e20 + keeperRatio * 1e18) {
+            reward2keeper = assetAmount * keeperRatio / 100;
             collateralAsset.safeTransfer(msg.sender, reward2keeper);
         }
+        collateralAsset.safeTransfer(provider, reducedAsset - reward2keeper);
+
         emit LiquidationRecord(provider, msg.sender, onBehalfOf, eusdAmount, reducedAsset, reward2keeper, false, block.timestamp);
     }
 

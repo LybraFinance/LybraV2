@@ -30,7 +30,7 @@ abstract contract LybraPeUSDVaultBase {
     event WithdrawAsset(address indexed sponsor, address asset, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Mint(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Burn(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
-    event LiquidationRecord(address indexed provider, address keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 LiquidateAssetAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
+    event LiquidationRecord(address indexed provider, address indexed keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 LiquidateAssetAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
 
     event RigidRedemption(address indexed caller, address indexed provider, uint256 peusdAmount, uint256 assetAmount, uint256 timestamp);
     event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
@@ -49,12 +49,12 @@ abstract contract LybraPeUSDVaultBase {
     function depositEtherToMint(uint256 mintAmount) external payable virtual;
 
     /**
-     * @notice Deposit staked ETH, update the interest distribution, can mint PeUSD directly
+     * @notice Deposit staked ETH, update the interest distribution, can mint peUSD directly
      * Emits a `DepositAsset` event.
      *
      * Requirements:
      * - `assetAmount` Must be higher than 0.
-     * - `mintAmount` Send 0 if doesn't mint PeUSD
+     * - `mintAmount` Send 0 if doesn't mint peUSD
      */
     function depositAssetToMint(uint256 assetAmount, uint256 mintAmount) external virtual {
         require(assetAmount >= 1 ether, "Deposit should not be less than 1 collateral asset.");
@@ -85,7 +85,7 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @notice The mint amount number of PeUSD is minted to the address
+     * @notice The mint amount number of peUSD is minted to the address
      * Emits a `Mint` event.
      *
      * Requirements:
@@ -98,7 +98,7 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @notice Burn the amount of PeUSD and payback the amount of minted PeUSD
+     * @notice Burn the amount of peUSD and payback the amount of minted peUSD
      * Emits a `Burn` event.
      * Requirements:
      * - `onBehalfOf` cannot be the zero address.
@@ -112,13 +112,13 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @notice Keeper liquidates borrowers whose collateral ratio is below badCollateralRatio, using PeUSD provided by Liquidation Provider.
+     * @notice Keeper liquidates borrowers whose collateral ratio is below badCollateralRatio, using peUSD provided by Liquidation Provider.
      *
      * Requirements:
      * - onBehalfOf Collateral Ratio should be below badCollateralRatio
      * - assetAmount should be less than 50% of collateral
-     * - provider should authorize Lybra to utilize PeUSD
-     * @dev After liquidation, borrower's debt is reduced by assetAmount * assetPrice, collateral is reduced by the assetAmount corresponding to 110% of the value. Keeper gets keeperRatio / 110 of Liquidation Reward and Liquidator gets the remaining collateral.
+     * - provider should authorize Lybra to utilize peUSD
+     * @dev After liquidation, borrower's debt is reduced by assetAmount * assetPrice, providers and keepers can receive up to an additional 10% liquidation reward.
      */
     function liquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
         uint256 assetPrice = getAssetPrice();
@@ -130,16 +130,21 @@ abstract contract LybraPeUSDVaultBase {
         uint256 peusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, peusdAmount);
-        uint256 reducedAsset = assetAmount * 11 / 10;
+        uint256 reducedAsset = assetAmount;
+        if(onBehalfOfCollateralRatio > 1e20 && onBehalfOfCollateralRatio < 11e19) {
+            reducedAsset = assetAmount * onBehalfOfCollateralRatio / 1e20;
+        }
+        if(onBehalfOfCollateralRatio >= 11e19) {
+            reducedAsset = assetAmount * 11 / 10;
+        }
         depositedAsset[onBehalfOf] -= reducedAsset;
         uint256 reward2keeper;
-        if (provider == msg.sender) {
-            collateralAsset.safeTransfer(msg.sender, reducedAsset);
-        } else {
-            reward2keeper = (reducedAsset * configurator.vaultKeeperRatio(address(this))) / 110;
-            collateralAsset.safeTransfer(provider, reducedAsset - reward2keeper);
+        uint256 keeperRatio = configurator.vaultKeeperRatio(address(this));
+        if (msg.sender != provider && onBehalfOfCollateralRatio >= 1e20 + keeperRatio * 1e18) {
+            reward2keeper = assetAmount * keeperRatio / 100;
             collateralAsset.safeTransfer(msg.sender, reward2keeper);
         }
+        collateralAsset.safeTransfer(provider, reducedAsset - reward2keeper);
         emit LiquidationRecord(provider, msg.sender, onBehalfOf, peusdAmount, reducedAsset, reward2keeper, false, block.timestamp);
     }
 
@@ -185,7 +190,7 @@ abstract contract LybraPeUSDVaultBase {
     }
 
     /**
-     * @notice Burn _provideramount PeUSD to payback minted PeUSD for _onBehalfOf.
+     * @notice Burn _provideramount peUSD to payback minted peUSD for _onBehalfOf.
      *
      * @dev Refresh LBR reward before reducing providers debt. Refresh Lybra generated service fee before reducing totalPeUSDCirculation.
      */
