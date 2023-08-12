@@ -16,6 +16,7 @@ pragma solidity ^0.8.17;
 
 import "../interfaces/IGovernanceTimelock.sol";
 import "../interfaces/IPeUSD.sol";
+import "../interfaces/IEUSD.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -58,7 +59,7 @@ contract LybraConfigurator is Initializable {
 
     IeUSDMiningIncentives public eUSDMiningIncentives;
     IProtocolRewardsPool public lybraProtocolRewardsPool;
-    IPeUSD public EUSD;
+    IEUSD public EUSD;
     IPeUSD public peUSD;
     uint256 public flashloanFee;
     // Limiting the maximum percentage of eUSD that can be cross-chain transferred to L2 in relation to the total supply.
@@ -115,7 +116,7 @@ contract LybraConfigurator is Initializable {
      * @notice Initializes the eUSD and peUSD address. This function can only be executed once.
      */
     function initToken(address _eusd, address _peusd) external onlyRole(DAO) {
-        if (address(EUSD) == address(0)) EUSD = IPeUSD(_eusd);
+        if (address(EUSD) == address(0)) EUSD = IEUSD(_eusd);
         if (address(peUSD) == address(0)) peUSD = IPeUSD(_peusd);
         EUSD.approve(_peusd, type(uint256).max);
     }
