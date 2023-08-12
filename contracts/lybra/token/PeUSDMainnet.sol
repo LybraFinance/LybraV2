@@ -131,6 +131,7 @@ contract PeUSDMainnet is OFTV2 {
         receiver.onFlashLoan(shareAmount, data);
         bool success = EUSD.transferFrom(address(receiver), address(this), EUSD.getMintedEUSDByShares(shareAmount));
         require(success, "TF");
+        require(EUSD.balanceOf(address(this)) <= configurator.getEUSDMaxLocked(),"ESL");
 
         uint256 burnShare = getFee(shareAmount);
         EUSD.burnShares(msg.sender, burnShare);
