@@ -151,7 +151,7 @@ abstract contract LybraEUSDVaultBase {
         require(onBehalfOfCollateralRatio < badCollateralRatio, "Borrowers collateral ratio should below badCollateralRatio");
 
         require(assetAmount * 2 <= depositedAsset[onBehalfOf], "a max of 50% collateral can be liquidated");
-        require(EUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation eUSD");
+        require(EUSD.allowance(provider, address(this)) != 0 || msg.sender == provider, "provider should authorize to provide liquidation eUSD");
         uint256 eusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, eusdAmount);
@@ -196,7 +196,7 @@ abstract contract LybraEUSDVaultBase {
         if (onBehalfOfCollateralRatio >= 1e20) {
             eusdAmount = (eusdAmount * 1e20) / onBehalfOfCollateralRatio;
         }
-        require(EUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation eUSD");
+        require(EUSD.allowance(provider, address(this)) != 0 || msg.sender == provider, "provider should authorize to provide liquidation eUSD");
 
         _repay(provider, onBehalfOf, eusdAmount);
 

@@ -126,7 +126,7 @@ abstract contract LybraPeUSDVaultBase {
         require(onBehalfOfCollateralRatio < configurator.getBadCollateralRatio(address(this)), "Borrowers collateral ratio should below badCollateralRatio");
 
         require(assetAmount * 2 <= depositedAsset[onBehalfOf], "a max of 50% collateral can be liquidated");
-        require(PeUSD.allowance(provider, address(this)) != 0, "provider should authorize to provide liquidation peUSD");
+        require(PeUSD.allowance(provider, address(this)) != 0 || msg.sender == provider, "provider should authorize to provide liquidation peUSD");
         uint256 peusdAmount = (assetAmount * assetPrice) / 1e18;
 
         _repay(provider, onBehalfOf, peusdAmount);
