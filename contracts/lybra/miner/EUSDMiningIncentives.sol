@@ -58,6 +58,9 @@ contract EUSDMiningIncentives is Ownable {
     bool public v1Supported;
     address immutable oldLybra;
 
+    event VaultsChanged(address[] vaults, uint256 time);
+    event LBROracleChanged(address newOracle, uint256 time);
+    event TokenChanged(address newLBR, address newEsLBR, uint256 time);
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
     event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, bool useEUSD, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
@@ -88,10 +91,12 @@ contract EUSDMiningIncentives is Ownable {
     function setToken(address _lbr, address _eslbr) external onlyOwner {
         LBR = _lbr;
         esLBR = _eslbr;
+        emit TokenChanged(_lbr, _eslbr, block.timestamp);
     }
 
     function setLBROracle(address _lbrOracle) external onlyOwner {
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
+        emit LBROracleChanged(_lbrOracle, block.timestamp);
     }
 
     function setPools(address[] memory _vaults) external onlyOwner {
@@ -100,6 +105,7 @@ contract EUSDMiningIncentives is Ownable {
             require(configurator.mintVault(_vaults[i]), "NOT_VAULT");
         }
         vaults = _vaults;
+        emit VaultsChanged(_vaults, block.timestamp);
     }
 
     function setBiddingCost(uint256 _biddingRatio) external onlyOwner {

@@ -13,6 +13,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/Iconfigurator.sol";
 import "../interfaces/IesLBR.sol";
+import "../interfaces/ILBR.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
@@ -26,7 +27,7 @@ contract ProtocolRewardsPool is Ownable {
     using SafeERC20 for ERC20;
     Iconfigurator public immutable configurator;
     IesLBR public esLBR;
-    IesLBR public LBR;
+    ILBR public LBR;
     IesLBRBoost public esLBRBoost;
     AggregatorV3Interface internal lbrPriceFeed;
     // Sum of (reward ratio * dt * 1e18 / total supply)
@@ -45,6 +46,7 @@ contract ProtocolRewardsPool is Ownable {
     event StakeLBR(address indexed user, uint256 amount, uint256 time);
     event UnstakeLBR(address indexed user, uint256 amount, uint256 time);
     event WithdrawLBR(address indexed user, uint256 amount, uint256 time);
+    event UnlockPrematurely(address indexed user, uint256 amount, uint256 time);
     event ClaimReward(address indexed user, uint256 eUSDAmount, address indexed token, uint256 tokenAmount, uint256 time);
     event GrabEsLBR(address indexed user, uint256 esLBRAmount, uint256 payAmount, bool useEUSD, uint256 time);
 
@@ -54,7 +56,7 @@ contract ProtocolRewardsPool is Ownable {
 
     function setTokenAddress(address _eslbr, address _lbr, address _boost, address _lbrOracle) external onlyOwner {
         esLBR = IesLBR(_eslbr);
-        LBR = IesLBR(_lbr);
+        LBR = ILBR(_lbr);
         esLBRBoost = IesLBRBoost(_boost);
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
     }
@@ -132,6 +134,7 @@ contract ProtocolRewardsPool is Ownable {
         unstakeRatio[msg.sender] = 0;
         time2fullRedemption[msg.sender] = 0;
         grabableAmount += burnAmount;
+        emit UnlockPrematurely(msg.sender, amount, block.timestamp);
     }
 
     /**

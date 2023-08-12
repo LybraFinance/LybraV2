@@ -26,6 +26,11 @@ contract esLBRBoost is Ownable {
         uint256 miningBoost;
     }
 
+    event StakeLBR(address indexed user, uint256 amount, uint256 time);
+    event NewLockSetting(uint256 duration, uint256 miningBoost);
+    event UserLockStatus(address indexed user, uint256 lockAmount, uint256 unlockTime, uint256 duration, uint256 miningBoost);
+    event Unlock(address indexed user, uint256 unLockAmount, uint256 unlockTime);
+
     // Constructor to initialize the default lock settings
     constructor(address _miningIncentives) {
         esLBRLockSettings.push(esLBRLockSetting(30 days, 5 * 1e18));
@@ -38,6 +43,7 @@ contract esLBRBoost is Ownable {
     // Function to add a new lock setting
     function addLockSetting(esLBRLockSetting memory setting) external onlyOwner {
         esLBRLockSettings.push(setting);
+        emit NewLockSetting(setting.duration, setting.miningBoost);
     }
 
     /**
@@ -56,16 +62,18 @@ contract esLBRBoost is Ownable {
         if(useLBR) {
             IesLBR(miningIncentives.LBR()).burn(msg.sender, lbrAmount);
             IesLBR(miningIncentives.esLBR()).mint(msg.sender, lbrAmount);
+            emit StakeLBR(msg.sender, lbrAmount, block.timestamp);
         }
         require(IesLBR(miningIncentives.esLBR()).balanceOf(msg.sender) >= userStatus.lockAmount + lbrAmount, "IB");
         miningIncentives.refreshReward(msg.sender);
         userLockStatus[msg.sender] = LockStatus(userStatus.lockAmount + lbrAmount, block.timestamp + _setting.duration, _setting.duration, _setting.miningBoost);
-        
+        emit UserLockStatus(msg.sender, userLockStatus[msg.sender].lockAmount, userLockStatus[msg.sender].duration, _setting.duration, _setting.miningBoost);
     }
 
-    function unLock() external {
+    function unlock() external {
         LockStatus storage userStatus = userLockStatus[msg.sender];
         require(userStatus.unlockTime < block.timestamp, "TNM");
+        emit Unlock(msg.sender, userStatus.lockAmount, block.timestamp);
         userStatus.lockAmount = 0;
     }
 

@@ -47,6 +47,8 @@ contract StakingRewardsV2 is Ownable {
     event WithdrawToken(address indexed user, uint256 amount, uint256 time);
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
+    event DurationChanged(uint256 duration, uint256 time);
+    event BoostChanged(address boostAddr, uint256 time);
 
     constructor(address _stakingToken, address _rewardToken, address _boost) {
         stakingToken = IERC20(_stakingToken);
@@ -122,11 +124,13 @@ contract StakingRewardsV2 is Ownable {
     function setRewardsDuration(uint256 _duration) external onlyOwner {
         require(finishAt < block.timestamp, "reward duration not finished");
         duration = _duration;
+        emit DurationChanged(_duration, block.timestamp);
     }
 
     // Allows the owner to set the boost contract address
     function setBoost(address _boost) external onlyOwner {
         esLBRBoost = IesLBRBoost(_boost);
+        emit BoostChanged(_boost, block.timestamp);
     }
 
     // Allows the owner to set the mining rewards.
