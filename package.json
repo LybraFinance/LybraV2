@@ -11,7 +11,7 @@
     "@chainlink/contracts": "^0.6.1",
     "@layerzerolabs/solidity-examples": "^0.0.12",
     "@nomicfoundation/hardhat-toolbox": "^2.0.2",
-    "@openzeppelin/contracts": "^4.8.3",
+    "@openzeppelin/contracts": "^4.9.2",
     "hardhat-gas-reporter": "^1.0.9"
   }
 }
