@@ -75,7 +75,7 @@ contract PeUSDMainnet is OFTV2 {
     function convertToPeUSD(address user, uint256 eusdAmount) public {
         require(_msgSender() == user || _msgSender() == address(this), "MDM");
         require(eusdAmount != 0, "ZA");
-        require(EUSD.balanceOf(address(this)) + eusdAmount <= configurator.getEUSDMaxLocked(),"ESL");
+        require(EUSD.balanceOf(address(this)) + eusdAmount <= configurator.getEUSDMaxLocked() || _msgSender() == address(configurator),"ESL");
         bool success = EUSD.transferFrom(user, address(this), eusdAmount);
         require(success, "TF");
         userConvertInfo[user].depositedEUSDShares += EUSD.getSharesByMintedEUSD(eusdAmount);
