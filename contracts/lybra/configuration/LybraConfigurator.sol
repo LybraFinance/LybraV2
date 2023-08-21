@@ -82,6 +82,8 @@ contract LybraConfigurator is Initializable {
     event TokenMinerChanges(address indexed pool, bool status);
     event VaultWeightChanged(address indexed pool, uint256 weight, uint256 timestamp);
     event SendProtocolRewards(address indexed token, uint256 amount, uint256 timestamp);
+    event EUSDOracleChanged(address oldAddr, address newAddr, uint256 timestamp);
+    event CurvePoolChanged(address oldAddr, address newAddr, uint256 timestamp);
 
     /// @notice Emitted when the fees for flash loaning a token have been updated
     /// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
@@ -92,13 +94,11 @@ contract LybraConfigurator is Initializable {
     }
 
     //stableToken = USDC
-    function initialize(address _dao, address _curvePool, address _eUSDPriceFeed, address _stableToken) public initializer {
+    function initialize(address _dao, address _stableToken) public initializer {
         redemptionFee = 50;
         flashloanFee = 500;
         maxStableRatio = 5_000;
         GovernanceTimelock = IGovernanceTimelock(_dao);
-        curvePool = ICurvePool(_curvePool);
-        eUSDPriceFeed = AggregatorV3Interface(_eUSDPriceFeed);
         stableToken = _stableToken;
     }
 
@@ -178,7 +178,13 @@ contract LybraConfigurator is Initializable {
     }
 
     function setEUSDOracle(address _eUSDOracle) external checkRole(TIMELOCK) {
+        emit EUSDOracleChanged(address(eUSDPriceFeed), _eUSDOracle, block.timestamp);
         eUSDPriceFeed = AggregatorV3Interface(_eUSDOracle);
+    }
+
+    function setCurvePool(address _curvePool) external checkRole(TIMELOCK) {
+        emit CurvePoolChanged(address(curvePool), _curvePool, block.timestamp);
+        curvePool = ICurvePool(_curvePool);
     }
 
     /**
@@ -320,7 +326,7 @@ contract LybraConfigurator is Initializable {
                 (, int price, , , ) = eUSDPriceFeed.latestRoundData();
                 if(price >= 100_500_000){
                     EUSD.approve(address(curvePool), balance);
-                    uint256 amount = curvePool.exchange_underlying(0, 2, balance, balance * uint(price) * 998 / 1e23);
+                    uint256 amount = curvePool.exchange_underlying(0, 2, balance, balance * uint(price) * 995 / 1e23);
                     IERC20(stableToken).safeTransfer(address(lybraProtocolRewardsPool), amount);
                     lybraProtocolRewardsPool.notifyRewardAmount(amount, 1);
                     emit SendProtocolRewards(stableToken, amount, block.timestamp);
