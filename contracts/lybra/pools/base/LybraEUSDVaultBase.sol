@@ -106,7 +106,7 @@ abstract contract LybraEUSDVaultBase {
         emit WithdrawAsset(msg.sender, address(collateralAsset), onBehalfOf, withdrawal, block.timestamp);
     }
 
-    function checkWithdrawal(address user, uint256 amount) internal view returns (uint256 withdrawal) {
+    function checkWithdrawal(address user, uint256 amount) public view returns (uint256 withdrawal) {
         withdrawal = block.timestamp - 3 days >= depositedTime[user] ? amount : (amount * 999) / 1000;
     }
 
@@ -240,11 +240,12 @@ abstract contract LybraEUSDVaultBase {
         require(providerCollateralRatio >= 100 * 1e18, "The provider's collateral ratio should be not less than 100%.");
         _repay(msg.sender, provider, eusdAmount);
         uint256 collateralAmount = eusdAmount * 1e18 * (10_000 - configurator.redemptionFee()) / assetPrice / 10_000;
-        require(collateralAmount >= minReceiveAmount, "EL");
+        uint256 sendAmount = checkWithdrawal(provider, collateralAmount);
+        require(sendAmount >= minReceiveAmount, "EL");
         depositedAsset[provider] -= collateralAmount;
         totalDepositedAsset -= collateralAmount;
-        collateralAsset.safeTransfer(msg.sender, checkWithdrawal(msg.sender, collateralAmount));
-        emit RigidRedemption(msg.sender, provider, eusdAmount, collateralAmount, block.timestamp);
+        collateralAsset.safeTransfer(msg.sender, sendAmount);
+        emit RigidRedemption(msg.sender, provider, eusdAmount, sendAmount, block.timestamp);
     }
 
     /**
