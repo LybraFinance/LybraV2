@@ -379,7 +379,8 @@ contract LybraConfigurator is Initializable {
     function getVaultWeight(
         address pool
     ) external view returns (uint256) {
-        if (vaultWeight[pool] == 0 && mintVault[pool]) return 100 * 1e18;
+        if(!mintVault[pool]) return 0;
+        if (vaultWeight[pool] == 0) return 100 * 1e18;
         return vaultWeight[pool];
     }
 
