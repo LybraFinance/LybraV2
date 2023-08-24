@@ -14,7 +14,7 @@ contract StakingRewardsOnArbi is NonblockingLzApp {
     uint16 public immutable dstChainId;
 
     // Duration of rewards to be paid out (in seconds)
-    uint256 public duration = 2_592_000;
+    uint256 public duration = 604_800;
     // Timestamp of when the rewards finish
     uint256 public finishAt;
     // Minimum of last updated time and reward finish time
