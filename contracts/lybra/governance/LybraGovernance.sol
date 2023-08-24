@@ -10,6 +10,7 @@ contract LybraGovernance is GovernorTimelockControl {
     
     IesLBR public esLBR;
     IGovernanceTimelock public GovernanceTimelock;
+    uint256 public quorumNumerator = 400;
 
     /// @notice Ballot receipt record for a voter
     struct Receipt {
@@ -35,7 +36,8 @@ contract LybraGovernance is GovernorTimelockControl {
         For,
         Abstain
     }
-     
+    
+    event QuorumNumeratorUpdated(uint256 oldQuorumNumerator, uint256 newQuorumNumerator);
 
     // TimelockController timelockAddress;
     constructor(string memory name_, TimelockController timelock_, address _esLBR) GovernorTimelockControl(timelock_)  Governor(name_) {
@@ -51,7 +53,14 @@ contract LybraGovernance is GovernorTimelockControl {
      * quorum depending on values such as the totalSupply of a token at this timepoint (see {ERC20Votes}).
      */
     function quorum(uint256 timepoint) public view override returns (uint256){
-        return esLBR.getPastTotalSupply(timepoint) * 4 / 100;
+        return esLBR.getPastTotalSupply(timepoint) * quorumNumerator / quorumDenominator();
+    }
+
+    /**
+     * @dev Returns the quorum denominator. Defaults to 10_000, but may be overridden.
+     */
+    function quorumDenominator() public view virtual returns (uint256) {
+        return 10_000;
     }
 
     
@@ -106,10 +115,42 @@ contract LybraGovernance is GovernorTimelockControl {
     /**
      * @dev Overridden execute function that run the already queued proposal through the timelock.
      */
-    function _execute(uint256 /* proposalId */, address[] memory targets, uint256[] memory values, bytes[] memory calldatas, bytes32 descriptionHash) internal virtual override {
+    function _execute(uint256 proposalId, address[] memory targets, uint256[] memory values, bytes[] memory calldatas, bytes32 descriptionHash) internal virtual override {
         require(GovernanceTimelock.checkOnlyRole(keccak256("TIMELOCK"), msg.sender), "NA");
-        super._execute(1, targets, values, calldatas, descriptionHash);
+        super._execute(proposalId, targets, values, calldatas, descriptionHash);
         // _timelock.executeBatch{value: msg.value}(targets, values, calldatas, 0, descriptionHash);
+    }
+
+      /**
+     * @dev Changes the quorum numerator.
+     *
+     * Emits a {QuorumNumeratorUpdated} event.
+     *
+     * Requirements:
+     *
+     * - Must be called through a governance proposal.
+     * - New numerator must be smaller or equal to the denominator.
+     */
+    function updateQuorumNumerator(uint256 newQuorumNumerator) external {
+        require(GovernanceTimelock.checkOnlyRole(keccak256("TIMELOCK"), msg.sender), "NA");
+        _updateQuorumNumerator(newQuorumNumerator);
+    }
+
+    /**
+     * @dev Changes the quorum numerator.
+     *
+     * Emits a {QuorumNumeratorUpdated} event.
+     *
+     * Requirements:
+     *
+     * - New numerator must be smaller or equal to the denominator.
+     */
+    function _updateQuorumNumerator(uint256 newQuorumNumerator) internal {
+        uint256 denominator = quorumDenominator();
+        require(newQuorumNumerator <= denominator, "Invalid quorum fraction.");
+        uint256 oldQuorumNumerator = quorumNumerator;
+        quorumNumerator = newQuorumNumerator;
+        emit QuorumNumeratorUpdated(oldQuorumNumerator, newQuorumNumerator);
     }
 
     function proposals(uint256 proposalId) external view returns (uint256 id, address proposer, uint256 eta, uint256 startBlock, uint256 endBlock, uint256 forVotes, uint256 againstVotes, uint256 abstainVotes, bool canceled, bool executed) {
