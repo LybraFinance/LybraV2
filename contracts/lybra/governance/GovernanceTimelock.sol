@@ -9,16 +9,13 @@ contract GovernanceTimelock is TimelockController {
     bytes32 public constant DAO = keccak256("DAO");
     bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
     bytes32 public constant ADMIN = keccak256("ADMIN");
-    bytes32 public constant GOV = keccak256("GOV");
 
-    constructor(uint256 minDelay, address[] memory proposers, address[] memory executors, address admin) TimelockController(minDelay, proposers, executors, admin) {
-       
-        _setRoleAdmin(DAO, GOV);
-        _setRoleAdmin(TIMELOCK, GOV);
-        _setRoleAdmin(ADMIN, GOV);
-        _grantRole(DAO, address(this));
+    constructor(uint256 minDelay, address[] memory proposers, address[] memory executors, address timeLock) TimelockController(minDelay, proposers, executors, msg.sender) {
+        _setRoleAdmin(DAO, DAO);
+        _setRoleAdmin(TIMELOCK, DAO);
+        _setRoleAdmin(ADMIN, DAO);
         _grantRole(DAO, msg.sender);
-        _grantRole(GOV, msg.sender);
+        _grantRole(TIMELOCK, timeLock);
     }
 
     function checkRole(bytes32 role, address _sender) public view  returns(bool){

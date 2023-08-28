@@ -84,6 +84,7 @@ contract LybraConfigurator is Initializable {
     event SendProtocolRewards(address indexed token, uint256 amount, uint256 timestamp);
     event EUSDOracleChanged(address oldAddr, address newAddr, uint256 timestamp);
     event CurvePoolChanged(address oldAddr, address newAddr, uint256 timestamp);
+    event GovernanceTimelockChanged(address newAddr, uint256 timestamp);
 
     /// @notice Emitted when the fees for flash loaning a token have been updated
     /// @param fee The new fee for this token as a percentage and multiplied by 100 to avoid decimals (for example, 10% is 10_00)
@@ -110,6 +111,11 @@ contract LybraConfigurator is Initializable {
     modifier checkRole(bytes32 role) {
         require(GovernanceTimelock.checkRole(role, msg.sender), "NA");
         _;
+    }
+
+    function setGovernanceTimelock(address _governance) external onlyRole(DAO) {
+        GovernanceTimelock = IGovernanceTimelock(_governance);
+        emit GovernanceTimelockChanged(_governance, block.timestamp);
     }
 
     /**
