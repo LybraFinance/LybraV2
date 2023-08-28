@@ -120,22 +120,20 @@ contract PeUSDMainnet is OFTV2 {
 
     /**
      * @dev Allows users to lend out any amount of eUSD for flash loan calls.
-     * @param receiver The address of the contract that will receive the borrowed eUSD.
      * @param eusdAmount The amount of eUSD to lend out.
      * @param data The data to be passed to the receiver contract for execution.
      */
-    function executeFlashloan(IFlashBorrower receiver, uint256 eusdAmount, bytes calldata data) public {
-        require(address(receiver) != address(this), "NA");
+    function executeFlashloan(uint256 eusdAmount, bytes calldata data) external {
         uint256 shareAmount = EUSD.getSharesByMintedEUSD(eusdAmount);
-        EUSD.transferShares(address(receiver), shareAmount);
-        receiver.onFlashLoan(shareAmount, data);
-        bool success = EUSD.transferFrom(address(receiver), address(this), EUSD.getMintedEUSDByShares(shareAmount));
+        EUSD.transferShares(msg.sender, shareAmount);
+        IFlashBorrower(msg.sender).onFlashLoan(shareAmount, data);
+        bool success = EUSD.transferFrom(msg.sender, address(this), EUSD.getMintedEUSDByShares(shareAmount));
         require(success, "TF");
         require(EUSD.balanceOf(address(this)) <= configurator.getEUSDMaxLocked(),"ESL");
 
         uint256 burnShare = getFee(shareAmount);
         EUSD.burnShares(msg.sender, burnShare);
-        emit Flashloaned(address(receiver), eusdAmount, burnShare, block.timestamp);
+        emit Flashloaned(msg.sender, eusdAmount, burnShare, block.timestamp);
     }
 
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
