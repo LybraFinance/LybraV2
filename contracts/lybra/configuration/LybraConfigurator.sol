@@ -67,9 +67,9 @@ contract LybraConfigurator is Initializable {
     address public stableToken;
     ICurvePool public curvePool;
     bool public premiumTradingEnabled;
-    bytes32 public constant DAO = keccak256("DAO");
-    bytes32 public constant TIMELOCK = keccak256("TIMELOCK");
-    bytes32 public constant ADMIN = keccak256("ADMIN");
+    bytes32 public immutable DAO = keccak256("DAO");
+    bytes32 public immutable TIMELOCK = keccak256("TIMELOCK");
+    bytes32 public immutable ADMIN = keccak256("ADMIN");
 
     event RedemptionFeeChanged(uint256 newSlippage);
     event SafeCollateralRatioChanged(address indexed pool, uint256 newRatio);
@@ -148,7 +148,7 @@ contract LybraConfigurator is Initializable {
     }
 
     /**
-     * @notice  badCollateralRatio can be decided by DAO,starts at 130%
+     * @notice  badCollateralRatio can be decided by DAO, starts at 130%
      */
     function setBadCollateralRatio(address pool, uint256 newRatio) external onlyRole(DAO) {
         require(newRatio >= 130 * 1e18 && newRatio <= 150 * 1e18 && newRatio <= vaultSafeCollateralRatio[pool] - 1e19, "LNA");
@@ -203,7 +203,7 @@ contract LybraConfigurator is Initializable {
     }
 
     /**
-     * @notice Enables or disables the repayment functionality for a asset pool.
+     * @notice Enables or disables the repayment functionality for an asset pool.
      * @param pool The address of the pool.
      * @param isActive Boolean value indicating whether repayment is active or paused.
      * @dev This function can only be called by accounts with TIMELOCK or higher privilege.
@@ -213,7 +213,7 @@ contract LybraConfigurator is Initializable {
     }
 
     /**
-     * @notice Enables or disables the mint functionality for a asset pool.
+     * @notice Enables or disables the mint functionality for an asset pool.
      * @param pool The address of the pool.
      * @param isActive Boolean value indicating whether minting is active or paused.
      * @dev This function can only be called by accounts with ADMIN or DAO.
@@ -250,7 +250,7 @@ contract LybraConfigurator is Initializable {
     }
 
     /**
-     * @notice  Set the borrowing annual percentage yield (APY) for a asset pool.
+     * @notice  Set the borrowing annual percentage yield (APY) for an asset pool.
      * @param pool The address of the pool to set the borrowing APY for.
      * @param newApy The new borrowing APY to set, limited to a maximum of 2%.
      */
@@ -277,7 +277,7 @@ contract LybraConfigurator is Initializable {
      * @param _bools An array of booleans indicating whether mining is allowed for each contract.
      */
     function setTokenMiner(address[] calldata _contracts, bool[] calldata _bools) external checkRole(TIMELOCK) {
-        for (uint256 i = 0; i < _contracts.length; i++) {
+        for (uint256 i; i < _contracts.length; i++) {
             tokenMiner[_contracts[i]] = _bools[i];
             emit TokenMinerChanges(_contracts[i], _bools[i]);
         }
@@ -366,7 +366,7 @@ contract LybraConfigurator is Initializable {
     }
 
     /**
-     * @dev Returns the safe collateral ratio for a asset pool.
+     * @dev Returns the safe collateral ratio for an asset pool.
      * @param pool The address of the pool to check.
      * @return The safe collateral ratio for the specified pool.
      */
