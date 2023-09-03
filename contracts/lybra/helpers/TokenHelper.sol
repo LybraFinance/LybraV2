@@ -29,8 +29,8 @@ contract TokenHelper is Ownable {
 
     function airdropEsLBR(address[] calldata to, uint256[] calldata value, string memory desc) external onlyOwner {
         require(block.timestamp <= deadline);
-        uint256 total = 0;
-        for(uint256 i = 0; i < to.length; i++){
+        uint256 total;
+        for(uint256 i; i < to.length; i++){
             esLBR.mint(to[i], value[i]);
             total += value[i];
         }
@@ -39,8 +39,8 @@ contract TokenHelper is Ownable {
 
     function airdropLBR(address[] calldata to, uint256[] calldata value, string memory desc) external onlyOwner {
         require(block.timestamp <= deadline);
-        uint256 total = 0;
-        for(uint256 i = 0; i < to.length; i++){
+        uint256 total;
+        for(uint256 i; i < to.length; i++){
             LBR.mint(to[i], value[i]);
             total += value[i];
         }
