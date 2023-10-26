@@ -239,8 +239,12 @@ abstract contract LybraEUSDVaultBase {
         uint256 providerCollateralRatio = (depositedAsset[provider] * assetPrice * 100) / borrowed[provider];
         require(providerCollateralRatio >= 100 * 1e18, "The provider's collateral ratio should be not less than 100%.");
         _repay(msg.sender, provider, eusdAmount);
-        uint256 collateralAmount = eusdAmount * 1e18 * (10_000 - configurator.redemptionFee()) / assetPrice / 10_000;
-        uint256 sendAmount = checkWithdrawal(provider, collateralAmount);
+        uint256 sendAmount = eusdAmount * 1e18 * (10_000 - configurator.redemptionFee()) / assetPrice / 10_000;
+        uint256 collateralAmount = sendAmount;
+
+        if (block.timestamp - 3 days < depositedTime[provider])
+            collateralAmount = sendAmount * 1000 / 999;
+
         require(sendAmount >= minReceiveAmount, "EL");
         depositedAsset[provider] -= collateralAmount;
         totalDepositedAsset -= collateralAmount;
