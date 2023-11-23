@@ -46,6 +46,10 @@ contract esLBRBoost is Ownable {
         emit NewLockSetting(setting.duration, setting.miningBoost);
     }
 
+    function setMiningIncentives(address _addr) external onlyOwner {
+        miningIncentives = IMiningIncentives(_addr);
+    }
+
     /**
      * @notice The user can set the lock status and choose to use either esLBR or LBR.
      * @param id The ID of the lock setting.
@@ -111,6 +115,6 @@ contract esLBRBoost is Ownable {
         uint256 stakedAmount = miningIncentives.stakedOf(user);
         uint256 totalStaked = miningIncentives.totalStaked();
         if(stakedAmount == 0 || totalStaked == 0) return 0;
-        return stakedAmount * (IesLBR(miningIncentives.LBR()).totalSupply() + IesLBR(miningIncentives.esLBR()).totalSupply()) / totalStaked;
+        return stakedAmount * IesLBR(miningIncentives.esLBR()).totalSupply() / totalStaked;
     }
 }

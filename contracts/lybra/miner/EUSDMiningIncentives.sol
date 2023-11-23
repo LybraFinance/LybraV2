@@ -50,27 +50,26 @@ contract EUSDMiningIncentives is Ownable {
     uint256 public extraRatio = 10 * 1e18;
     uint256 public biddingFeeRatio = 3000;
     address public ethlbrStakePool;
-    address public ethlbrLpToken;
     uint256 public minDlpRatio = 500;
-    AggregatorV3Interface internal etherPriceFeed;
+    AggregatorV3Interface internal lpPriceFeed;
     AggregatorV3Interface internal lbrPriceFeed;
     bool public isEUSDBuyoutAllowed = true;
-    bool public v1Supported;
+    bool public v1Supported = true;
     address immutable oldLybra;
 
     event VaultsChanged(address[] vaults, uint256 time);
     event LBROracleChanged(address newOracle, uint256 time);
+    event LpOracleChanged(address newOracle, uint256 time);
     event TokenChanged(address newLBR, address newEsLBR, uint256 time);
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
     event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, bool useEUSD, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
-    //etherOracle = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
     //wETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
-    constructor(address _config, address _etherOracle, address _lbrOracle, address _weth, address _oldEUSD) {
+    constructor(address _config, address _lpOracle, address _lbrOracle, address _weth, address _oldEUSD) {
         configurator = Iconfigurator(_config);
         EUSD = IEUSD(configurator.getEUSDAddress());
-        etherPriceFeed = AggregatorV3Interface(_etherOracle);
+        lpPriceFeed = AggregatorV3Interface(_lpOracle);
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
         wETH = _weth;
         oldLybra = _oldEUSD;
@@ -97,6 +96,11 @@ contract EUSDMiningIncentives is Ownable {
     function setLBROracle(address _lbrOracle) external onlyOwner {
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
         emit LBROracleChanged(_lbrOracle, block.timestamp);
+    }
+
+    function setLpOracle(address _lpOracle) external onlyOwner {
+        lpPriceFeed = AggregatorV3Interface(_lpOracle);
+        emit LpOracleChanged(_lpOracle, block.timestamp);
     }
 
     function setPools(address[] memory _vaults) external onlyOwner {
@@ -136,9 +140,8 @@ contract EUSDMiningIncentives is Ownable {
         duration = _duration;
     }
 
-    function setEthlbrStakeInfo(address _pool, address _lp) external onlyOwner {
+    function setEthlbrStakeInfo(address _pool) external onlyOwner {
         ethlbrStakePool = _pool;
-        ethlbrLpToken = _lp;
     }
     function setEUSDBuyoutAllowed(bool _bool) external onlyOwner {
         isEUSDBuyoutAllowed = _bool;
@@ -181,17 +184,11 @@ contract EUSDMiningIncentives is Ownable {
     /**
      * @notice Returns the value of the user's staked LP tokens in the ETH-LBR liquidity pool.
      * @param user The user's address.
-     * @return The value of the user's staked LP tokens in ETH and LBR.
+     * @return The value of the user's staked LP tokens.
      */
     function stakedLBRLpValue(address user) public view returns (uint256) {
-        uint256 totalLp = IEUSD(ethlbrLpToken).totalSupply();
-        if(totalLp == 0) return 0;
-        (, int etherPrice, , , ) = etherPriceFeed.latestRoundData();
-        (, int lbrPrice, , , ) = lbrPriceFeed.latestRoundData();
-        uint256 etherInLp = (IEUSD(wETH).balanceOf(ethlbrLpToken) * uint(etherPrice)) / 1e8;
-        uint256 lbrInLp = (IEUSD(LBR).balanceOf(ethlbrLpToken) * uint(lbrPrice)) / 1e8;
-        uint256 userStaked = IEUSD(ethlbrStakePool).balanceOf(user);
-        return (userStaked * (lbrInLp + etherInLp)) / totalLp;
+        (, int lpPriceFeed, , , ) = lpPriceFeed.latestRoundData();
+        return IEUSD(ethlbrStakePool).balanceOf(user) * uint256(lpPriceFeed) / 1e8;
     }
 
     function lastTimeRewardApplicable() public view returns (uint256) {
