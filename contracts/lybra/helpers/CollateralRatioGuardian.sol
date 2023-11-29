@@ -49,6 +49,7 @@ contract CollateralRatioGuardian is Ownable {
     function setAutoRepayment(address[] memory vaults, RepaymentSetting[] memory settings) external {
         require(vaults.length == settings.length, "ALI");
         for(uint i; i < vaults.length;i++) {
+	        require(configurator.mintVault(vaults[i]), "NV");
             require(settings[i].expectedCollateralRatio > settings[i].triggerCollateralRatio, "The expectedCollateralRatio needs to be higher than the triggerCollateralRatio.");
             require(settings[i].triggerCollateralRatio > configurator.getBadCollateralRatio(vaults[i]), "The triggerCollateralRatio needs to be higher than lybra.badCollateralRatio.");
             require(settings[i].expectedCollateralRatio >= configurator.getSafeCollateralRatio(vaults[i]), "The expectedCollateralRatio needs to be greater than or equal to lybra.safeCollateralRatio");
@@ -65,6 +66,7 @@ contract CollateralRatioGuardian is Ownable {
     * `user` must have authorized this contract to spend eUSD in an amount greater than the repayment amount + fee.
     */
     function execute(address user, address vault) external {
+	    require(configurator.mintVault(vault), "NV");
         RepaymentSetting memory userSetting = userRepaymentSettings[user][vault];
         require(userSetting.active == true, "The user has not enabled the automatic repayment");
         uint256 userCollateralRatio = getCollateralRatio(user, vault);
